@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% set active = 'programs' %}
+{% block title %}{{ program.name }} AST · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/programs">Programs</a>
+  <span class="sep">/</span>
+  <a href="/programs/{{ program.name }}">{{ program.name }}</a>
+  <span class="sep">/</span>
+  <span>AST</span>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ program.name }} — AST Explorer</h1>
+    <div class="subtitle">
+      Interactive parse tree of <span class="mono">{{ program.file }}</span>.
+      Click any node to inspect its payload. Pan with mouse drag, zoom with scroll.
+    </div>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <select id="layout-select" class="btn" style="padding:4px 10px;">
+      <option value="dagre">dagre (tree)</option>
+      <option value="breadthfirst">breadthfirst</option>
+      <option value="cose">cose (force)</option>
+    </select>
+    <button id="fit-btn" class="btn">Fit</button>
+  </div>
+</div>
+
+<div class="stat-grid" style="margin-bottom:14px;">
+  <div class="stat"><div class="stat-num" id="stat-nodes">…</div><div class="stat-label">Nodes</div></div>
+  <div class="stat"><div class="stat-num" id="stat-edges">…</div><div class="stat-label">Edges</div></div>
+  <div class="stat"><div class="stat-num" id="stat-kinds">…</div><div class="stat-label">Distinct kinds</div></div>
+</div>
+
+<div class="ast-layout">
+  <div class="card ast-canvas-card">
+    <div id="ast-canvas"></div>
+  </div>
+  <div class="card ast-side-card">
+    <div class="card-head"><span class="card-title">Node details</span></div>
+    <div id="node-details" class="ast-details">Click a node in the AST to see its payload here.</div>
+  </div>
+</div>
+
+<style>
+.ast-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  height: calc(100vh - 280px);
+  min-height: 520px;
+}
+.ast-canvas-card { padding: 0; overflow: hidden; }
+#ast-canvas { width: 100%; height: 100%; background: #010409; }
+.ast-side-card { overflow-y: auto; }
+.ast-details {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  max-height: calc(100vh - 380px);
+  overflow-y: auto;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script>
+(async function(){
+  const programName = {{ program.name | tojson }};
+  const res = await fetch(`/api/programs/${encodeURIComponent(programName)}/ast?max_nodes=2000`);
+  const data = await res.json();
+
+  document.getElementById('stat-nodes').textContent = data.node_count;
+  document.getElementById('stat-edges').textContent = data.edge_count;
+  const kinds = new Set(data.elements.nodes.map(n => n.data.kind));
+  document.getElementById('stat-kinds').textContent = kinds.size;
+
+  const kindColors = {
+    CompilationUnit:      '#a371f7',
+    ProgramUnit:          '#a371f7',
+    DataDivision:         '#d29922',
+    WorkingStorageSection:'#d29922',
+    ProcedureDivision:    '#58a6ff',
+    Paragraph:            '#58a6ff',
+    Statement:            '#8b949e',
+    DataItem:             '#3fb950',
+    ExecCicsBlock:        '#db6d28',
+    ExecSqlBlock:         '#f85149',
+  };
+
+  const cy = cytoscape({
+    container: document.getElementById('ast-canvas'),
+    elements: data.elements,
+    style: [
+      {selector: 'node', style: {
+        'background-color': ele => kindColors[ele.data('kind')] || '#8b949e',
+        'label': 'data(label)',
+        'color': '#f0f6fc',
+        'font-size': '10px',
+        'text-valign': 'center',
+        'text-halign': 'right',
+        'text-margin-x': 6,
+        'width': 16,
+        'height': 16,
+        'border-color': '#30363d',
+        'border-width': 1,
+      }},
+      {selector: 'node:selected', style: {
+        'border-color': '#f0f6fc',
+        'border-width': 2,
+        'width': 22,
+        'height': 22,
+      }},
+      {selector: 'edge', style: {
+        'width': 1,
+        'line-color': '#30363d',
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'target-arrow-color': '#30363d',
+        'arrow-scale': 0.6,
+      }},
+    ],
+    layout: { name: 'dagre', rankDir: 'TB', nodeSep: 14, rankSep: 30, fit: true },
+    wheelSensitivity: 0.2,
+  });
+
+  cy.on('tap', 'node', evt => {
+    const d = evt.target.data();
+    document.getElementById('node-details').textContent = JSON.stringify({
+      kind: d.kind,
+      name: d.name,
+      label: d.label,
+      line: d.line,
+      end_line: d.end_line,
+      payload: d.payload,
+    }, null, 2);
+  });
+
+  document.getElementById('layout-select').addEventListener('change', e => {
+    cy.layout({ name: e.target.value, rankDir: 'TB', nodeSep: 14, rankSep: 30, fit: true }).run();
+  });
+  document.getElementById('fit-btn').addEventListener('click', () => cy.fit());
+})();
+</script>
+{% endblock %}

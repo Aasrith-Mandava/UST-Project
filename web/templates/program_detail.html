@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% set active = 'programs' %}
+{% block title %}{{ program.name }} · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/programs">Programs</a>
+  <span class="sep">/</span>
+  <span>{{ program.name }}</span>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ program.name }}</h1>
+    <div class="meta">
+      <span class="mono">{{ program.file }}</span> · lines {{ program.start_line }}–{{ program.end_line }} ·
+      <span class="uuid" onclick="lookupUuid('{{ program.uuid }}')">{{ program.uuid }}</span>
+    </div>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <a class="btn" href="/programs/{{ program.name }}/diagrams">View Diagrams →</a>
+    <a class="btn btn-primary" href="/programs/{{ program.name }}/ast">View AST →</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat-num">{{ paragraphs|length }}</div><div class="stat-label">Paragraphs</div></div>
+  <div class="stat"><div class="stat-num">{{ file_io|length }}</div><div class="stat-label">File operations</div></div>
+  <div class="stat"><div class="stat-num">{{ calls|length }}</div><div class="stat-label">Calls out</div></div>
+  <div class="stat"><div class="stat-num">{{ control_flow|length }}</div><div class="stat-label">PERFORM edges</div></div>
+  <div class="stat"><div class="stat-num">{{ copybooks|length }}</div><div class="stat-label">Copybooks used</div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="paragraphs">Paragraphs</div>
+  <div class="tab" data-tab="calls">Calls ({{ calls|length }})</div>
+  <div class="tab" data-tab="fileio">File I/O ({{ file_io|length }})</div>
+  <div class="tab" data-tab="cf">Control Flow ({{ control_flow|length }})</div>
+  <div class="tab" data-tab="cpy">Copybooks ({{ copybooks|length }})</div>
+</div>
+
+<div class="tab-content active" data-tab="paragraphs">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th class="right">Start</th><th class="right">End</th><th class="right">Lines</th><th>UUID</th></tr></thead>
+      <tbody>
+        {% for p in paragraphs %}
+        <tr>
+          <td><a href="/paragraphs/{{ p.uuid }}">{{ p.name }}</a></td>
+          <td class="right mono">{{ p.start_line }}</td>
+          <td class="right mono">{{ p.end_line }}</td>
+          <td class="right mono">{{ p.end_line - p.start_line + 1 }}</td>
+          <td><span class="uuid" onclick="lookupUuid('{{ p.uuid }}')">{{ p.uuid[:8] }}…</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab-content" data-tab="calls">
+  {% if calls %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kind</th><th>Callee</th><th class="right">Line</th><th>Call site UUID</th></tr></thead>
+      <tbody>
+        {% for c in calls %}
+        <tr>
+          <td>{% if c.edge_kind == 'CALL_STATIC' %}<span class="pill accent">{{ c.edge_kind }}</span>{% elif c.edge_kind == 'CICS_XCTL' %}<span class="pill purple">{{ c.edge_kind }}</span>{% else %}<span class="pill">{{ c.edge_kind }}</span>{% endif %}</td>
+          <td class="mono">{{ c.callee_program }}</td>
+          <td class="right mono">{{ c.line }}</td>
+          <td><span class="uuid" onclick="lookupUuid('{{ c.caller_site_uuid }}')">{{ c.caller_site_uuid[:8] if c.caller_site_uuid else '—' }}…</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">No outgoing calls.</div>{% endif %}
+</div>
+
+<div class="tab-content" data-tab="fileio">
+  {% if file_io %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Operation</th><th>File</th><th>Record copybook</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for f in file_io %}
+        <tr>
+          <td>{% if f.operation in ('READ','READNEXT','READPREV','STARTBR','ENDBR') %}<span class="pill accent">{{ f.operation }}</span>{% else %}<span class="pill warn">{{ f.operation }}</span>{% endif %}</td>
+          <td class="mono">{{ f.file_name }}</td>
+          <td class="mono dim">{{ f.record_copybook or '—' }}</td>
+          <td class="right mono">{{ f.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">No file I/O detected.</div>{% endif %}
+</div>
+
+<div class="tab-content" data-tab="cf">
+  {% if control_flow %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Edge</th><th>From paragraph</th><th>To paragraph</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for e in control_flow %}
+        <tr>
+          <td><span class="pill">{{ e.edge_kind }}</span></td>
+          <td class="mono">{{ e.from_paragraph }}</td>
+          <td class="mono">{{ e.to_paragraph }}</td>
+          <td class="right mono">{{ e.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">No PERFORM edges detected.</div>{% endif %}
+</div>
+
+<div class="tab-content" data-tab="cpy">
+  {% if copybooks %}
+  <div class="grid-3">
+    {% for cb in copybooks %}<div class="card" style="padding: 14px 16px; margin: 0;"><div class="mono">{{ cb }}</div></div>{% endfor %}
+  </div>
+  {% else %}<div class="empty">No copybooks used.</div>{% endif %}
+</div>
+
+{% endblock %}

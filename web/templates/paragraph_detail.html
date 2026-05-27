@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% set active = 'programs' %}
+{% block title %}{{ paragraph.name }} · {{ program_name }} · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/programs">Programs</a>
+  <span class="sep">/</span>
+  <a href="/programs/{{ program_name }}">{{ program_name }}</a>
+  <span class="sep">/</span>
+  <span>{{ paragraph.name }}</span>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ paragraph.name }}</h1>
+    <div class="meta">
+      <span class="mono">{{ paragraph.file }}</span> · lines {{ paragraph.start_line }}–{{ paragraph.end_line }}
+      ({{ paragraph.end_line - paragraph.start_line + 1 }} lines) ·
+      <span class="uuid" onclick="lookupUuid('{{ paragraph.uuid }}')">{{ paragraph.uuid }}</span>
+    </div>
+  </div>
+  <a class="btn" href="/paragraph/{{ paragraph.uuid }}" target="_blank">View JSON ↗</a>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat-num">{{ statements|length }}</div><div class="stat-label">Statements</div></div>
+  <div class="stat"><div class="stat-num">{{ outgoing_cf|length }}</div><div class="stat-label">PERFORM edges out</div></div>
+  <div class="stat"><div class="stat-num">{{ calls|length }}</div><div class="stat-label">Calls in this paragraph</div></div>
+  <div class="stat"><div class="stat-num">{{ file_io|length }}</div><div class="stat-label">File operations</div></div>
+  <div class="stat"><div class="stat-num">{{ def_use|length }}</div><div class="stat-label">Read/write accesses</div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="stmts">Statements ({{ statements|length }})</div>
+  {% if outgoing_cf %}<div class="tab" data-tab="cf">PERFORM out ({{ outgoing_cf|length }})</div>{% endif %}
+  {% if calls %}<div class="tab" data-tab="calls">Calls ({{ calls|length }})</div>{% endif %}
+  {% if file_io %}<div class="tab" data-tab="fio">File I/O ({{ file_io|length }})</div>{% endif %}
+  {% if def_use %}<div class="tab" data-tab="du">Def/Use ({{ def_use|length }})</div>{% endif %}
+  {% if callers %}<div class="tab" data-tab="callers">Called from ({{ callers|length }})</div>{% endif %}
+</div>
+
+<div class="tab-content active" data-tab="stmts">
+  {% if statements %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:140px;">Type</th><th>Text</th><th class="right" style="width:80px;">Line</th><th style="width:120px;">UUID</th></tr></thead>
+      <tbody>
+        {% for s in statements %}
+        <tr>
+          <td>
+            {% if s.statement_type == 'EXEC_CICS' %}
+              <span class="pill purple">EXEC CICS {{ s.verb or '' }}</span>
+            {% elif s.statement_type == 'EXEC_SQL' %}
+              <span class="pill accent">EXEC SQL {{ s.verb or '' }}</span>
+            {% elif s.statement_type == 'CALL' %}
+              <span class="pill accent">CALL</span>
+            {% elif s.statement_type == 'PERFORM' %}
+              <span class="pill">PERFORM</span>
+            {% elif s.statement_type == 'IF' or s.statement_type == 'EVALUATE' %}
+              <span class="pill warn">{{ s.statement_type }}</span>
+            {% elif s.statement_type == 'MOVE' or s.statement_type == 'COMPUTE' or s.statement_type == 'SET' or s.statement_type == 'INITIALIZE' or s.statement_type == 'ADD' %}
+              <span class="pill success">{{ s.statement_type }}</span>
+            {% else %}
+              <span class="pill">{{ s.statement_type }}</span>
+            {% endif %}
+          </td>
+          <td class="mono" style="font-size:12px; max-width:700px; word-break:break-word;">
+            {% if s.text %}{{ s.text[:300] }}{% if s.text|length > 300 %}…{% endif %}{% else %}<span class="dim">—</span>{% endif %}
+            {% if s.args %}
+              <div style="margin-top:6px;">
+                {% for k, v in s.args.items() %}<span class="pill" style="margin-right:4px;">{{ k }}{% if v %}=<code>{{ v }}</code>{% endif %}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </td>
+          <td class="right mono dim">{{ s.start_line }}</td>
+          <td><span class="uuid" onclick="lookupUuid('{{ s.uuid }}')">{{ s.uuid[:8] }}…</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">No statements detected in this paragraph.</div>{% endif %}
+</div>
+
+{% if outgoing_cf %}
+<div class="tab-content" data-tab="cf">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Edge</th><th>To paragraph</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for e in outgoing_cf %}
+        <tr>
+          <td><span class="pill">{{ e.edge_kind }}</span></td>
+          <td><a href="/paragraphs/{{ e.to_paragraph_uuid }}" class="mono">{{ e.to_paragraph }}</a></td>
+          <td class="right mono">{{ e.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if calls %}
+<div class="tab-content" data-tab="calls">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Edge</th><th>Callee</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for c in calls %}
+        <tr>
+          <td>{% if c.edge_kind == 'CALL_STATIC' %}<span class="pill accent">{{ c.edge_kind }}</span>{% elif c.edge_kind == 'CICS_XCTL' or c.edge_kind == 'CICS_LINK' %}<span class="pill purple">{{ c.edge_kind }}</span>{% else %}<span class="pill">{{ c.edge_kind }}</span>{% endif %}</td>
+          <td class="mono">{{ c.callee_program }}</td>
+          <td class="right mono">{{ c.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if file_io %}
+<div class="tab-content" data-tab="fio">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Operation</th><th>File</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for f in file_io %}
+        <tr>
+          <td>{% if f.operation in ('READ','READNEXT','READPREV','STARTBR','ENDBR') %}<span class="pill accent">{{ f.operation }}</span>{% else %}<span class="pill warn">{{ f.operation }}</span>{% endif %}</td>
+          <td class="mono">{{ f.file_name }}</td>
+          <td class="right mono">{{ f.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if def_use %}
+<div class="tab-content" data-tab="du">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Access</th><th>Identifier</th><th>Statement</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for d in def_use %}
+        <tr>
+          <td>{% if d.access_kind == 'WRITE' %}<span class="pill warn">WRITE</span>{% else %}<span class="pill accent">READ</span>{% endif %}</td>
+          <td class="mono">{{ d.data_item_name }}</td>
+          <td class="mono dim">{{ d.statement_kind }}</td>
+          <td class="right mono">{{ d.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if callers %}
+<div class="tab-content" data-tab="callers">
+  <p class="subtitle">Other paragraphs in {{ program_name }} that PERFORM this one.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Edge</th><th>From paragraph</th><th class="right">Line</th></tr></thead>
+      <tbody>
+        {% for e in callers %}
+        <tr>
+          <td><span class="pill">{{ e.edge_kind }}</span></td>
+          <td class="mono">{{ e.from_paragraph }}</td>
+          <td class="right mono">{{ e.line }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

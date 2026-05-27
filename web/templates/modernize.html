@@ -1,0 +1,545 @@
+{% extends "base.html" %}
+{% set active = 'repo' %}
+{% block title %}Transform Code · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Transform Code</h1>
+    <div class="subtitle">
+      Per-file code modernization. Pick any file from the corpus — COBOL, JCL, BMS,
+      copybook, CSD, ASM, MAC, PROC, CTL, scheduler — and a multi-agent pipeline
+      (Code Emitter + Critic) generates the modernized Java / Spring / Thymeleaf
+      equivalent on demand. Generation is grounded in the structured artifact (Rule 1),
+      cached after first run, and the Critic flags any semantic-preservation risks.
+    </div>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <a href="/repo/all" class="btn" style="padding:6px 14px; font-size:13px;">Batch view (all 39 Java files) →</a>
+  </div>
+</div>
+
+<div class="modernize-layout">
+
+  {# ============================================================ #}
+  {#         LEFT: FILE-KIND ACCORDION + PER-KIND TARGET          #}
+  {# ============================================================ #}
+  <aside class="mz-sidebar">
+    {% for g in groups %}
+    <details class="kind-group" {% if loop.first %}open{% endif %}>
+      <summary class="kind-summary">
+        <svg class="sidebar-icon"><use href="#{{ g.icon }}"/></svg>
+        <span class="kind-label">{{ g.label }}</span>
+        <span class="kind-count">{{ g.count }}</span>
+      </summary>
+      <div class="kind-target">→ <span>{{ g.target.framework or 'Java' }}</span></div>
+      <ul class="file-list">
+        {% for f in g.files %}
+        <li>
+          <a href="#" class="file-link" data-kind="{{ g.kind }}" data-name="{{ f.name }}">
+            <span class="file-name">{{ f.name }}</span>
+            <span class="file-bytes">{{ (f.bytes / 1024)|round|int }} KB</span>
+          </a>
+        </li>
+        {% endfor %}
+        {% if not g.files %}
+        <li class="file-empty">No files of this type</li>
+        {% endif %}
+      </ul>
+    </details>
+    {% endfor %}
+  </aside>
+
+  {# ============================================================ #}
+  {#                RIGHT: MODERNIZATION OUTPUT                   #}
+  {# ============================================================ #}
+  <div class="mz-main">
+
+    <div id="welcome" class="welcome-card">
+      <h2>Pick a file from the left</h2>
+      <p>Each file kind modernizes to a specific Java/Spring target:</p>
+      <ul style="line-height:1.9;">
+        <li><strong>COBOL</strong> (.cbl) → Java class with PIC-typed fields and paragraph methods (deterministic rule-based emitter; spec-driven Javadoc)</li>
+        <li><strong>Copybook</strong> (.cpy) → Java 17 record / POJO with typed fields</li>
+        <li><strong>JCL</strong> (.jcl) → Spring Batch <code>@Configuration</code> with <code>@Bean</code> Jobs + Steps</li>
+        <li><strong>PROC</strong> (.prc) → Spring Batch reusable sub-flow</li>
+        <li><strong>BMS</strong> (.bms) → Thymeleaf template + Spring MVC <code>@Controller</code> skeleton</li>
+        <li><strong>CSD</strong> (.csd) → Spring <code>@Configuration</code> replacing CICS registry</li>
+        <li><strong>ASM</strong> (.asm) → Java stub class for opaque callable</li>
+        <li><strong>MAC</strong> (.mac) → Java utility class (constants + helpers)</li>
+        <li><strong>CTL</strong> (.ctl) → Java sort/filter implementation</li>
+        <li><strong>Scheduler</strong> → Spring <code>@Scheduled</code> annotated bean</li>
+      </ul>
+      <p>Generation runs <strong>Code Emitter</strong> (Gemini) then <strong>Critic</strong> (Groq) — total ~25-40s. Results are cached.
+      For COBOL, the deterministic rule-based emitter runs in &lt;2s and skips the LLM call.</p>
+    </div>
+
+    <div id="file-view" style="display:none;">
+
+      {# Header card #}
+      <div class="file-header">
+        <div>
+          <div class="file-eyebrow">
+            <span id="fh-kind"></span> &nbsp;→&nbsp; <span id="fh-target">—</span>
+          </div>
+          <h2 class="file-title" id="fh-name"></h2>
+          <div class="file-meta" id="fh-meta"></div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="generate-btn" class="btn btn-primary">Modernize</button>
+          <button id="regenerate-btn" class="btn" style="display:none;">Regenerate</button>
+          <button id="copy-btn" class="btn" style="display:none;">Copy code</button>
+          <button id="download-btn" class="btn" style="display:none;">Download .java</button>
+        </div>
+      </div>
+
+      {# Multi-agent status #}
+      <div id="pipeline-status" class="pipeline-status" style="display:none;">
+        <div class="agent-card" data-agent="CodeEmitter">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Code Emitter</div><div class="agent-state">idle</div></div>
+        </div>
+        <div class="agent-card" data-agent="Critic">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Critic (semantic preservation)</div><div class="agent-state">idle</div></div>
+        </div>
+        <div class="agent-card" data-agent="JavaEmitter (rule-based)">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Java Emitter (rule-based)</div><div class="agent-state">used for COBOL</div></div>
+        </div>
+      </div>
+
+      {# Section 1: Context Summary #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">01</span>Source Context</h3>
+        <div class="kpi-row" id="ctx-summary"></div>
+      </section>
+
+      {# Section 2: Generated Code #}
+      <section class="spec-section">
+        <h3 class="spec-section-title">
+          <span class="num">02</span>Generated Code
+          <span id="code-stats" class="code-stats"></span>
+        </h3>
+        <div id="code-content" class="code-content">
+          <div class="code-empty">Click "Modernize" to generate.</div>
+        </div>
+      </section>
+
+      {# Section 3: Critic Review #}
+      <section class="spec-section">
+        <h3 class="spec-section-title">
+          <span class="num">03</span>Critic Review
+          <span id="verdict-pill" class="verdict-pill" style="display:none;"></span>
+        </h3>
+        <div id="critic-content" class="spec-content empty">Click "Modernize" to generate.</div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.modernize-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.mz-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.kind-group { border-bottom: 1px solid var(--border); }
+.kind-group:last-child { border-bottom: none; }
+.kind-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  list-style: none;
+  user-select: none;
+}
+.kind-summary::-webkit-details-marker { display: none; }
+.kind-summary:hover { background: var(--surface-2); border-radius: 6px; }
+.kind-summary .sidebar-icon { width: 14px; height: 14px; opacity: 0.85; }
+.kind-summary .kind-label { flex: 1; }
+.kind-summary .kind-count {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.kind-group[open] .kind-summary { background: var(--surface-2); border-radius: 6px 6px 0 0; }
+.kind-target {
+  padding: 4px 32px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.kind-target span { color: var(--accent); }
+.file-list { list-style: none; padding: 0 0 8px; margin: 0; }
+.file-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px 6px 32px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+}
+.file-link:hover { background: var(--surface-2); border-left-color: var(--accent); text-decoration: none; }
+.file-link.active { background: rgba(88,166,255,0.12); border-left-color: var(--accent); color: var(--text-bright); }
+.file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-bytes { color: var(--text-dim); font-size: 11px; }
+.file-empty { color: var(--text-dim); font-size: 12px; padding: 8px 32px; font-style: italic; }
+
+.mz-main { min-width: 0; }
+.welcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 32px;
+}
+.welcome-card h2 { margin-top: 0; }
+.welcome-card p, .welcome-card li { color: var(--text-dim); line-height: 1.65; }
+.welcome-card code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.file-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+.file-eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.file-title { font-size: 22px; margin: 0 0 4px; color: var(--text-bright); font-family: var(--mono); }
+.file-meta { font-size: 12px; color: var(--text-dim); }
+
+.pipeline-status {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.agent-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface-3);
+  border: 2px solid var(--border);
+  transition: all 0.15s;
+}
+.agent-card[data-state="running"] .agent-dot {
+  background: var(--accent); border-color: var(--accent);
+  animation: pulse 1.2s infinite;
+}
+.agent-card[data-state="done"] .agent-dot { background: var(--success); border-color: var(--success); }
+.agent-card[data-state="skipped"] .agent-dot { background: var(--text-dim); border-color: var(--text-dim); }
+.agent-name { font-weight: 600; color: var(--text-bright); }
+.agent-state { font-size: 11px; color: var(--text-dim); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.spec-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+}
+.spec-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-bright);
+  margin: 0 0 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+.spec-section-title .num { font-family: var(--mono); color: var(--accent); font-size: 12px; }
+.code-stats {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--mono);
+}
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kpi-row .kpi { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+.kpi-num { font-size: 22px; font-weight: 700; color: var(--text-bright); }
+.kpi-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.code-content {
+  background: #010409;
+  border-radius: 6px;
+  padding: 0;
+  overflow: hidden;
+}
+.code-content pre {
+  margin: 0;
+  padding: 16px 20px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow: auto;
+  max-height: 640px;
+  white-space: pre;
+}
+.code-empty { padding: 40px; text-align: center; color: var(--text-dim); font-style: italic; }
+
+.spec-content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.spec-content.empty { color: var(--text-dim); font-style: italic; }
+.spec-content h2, .spec-content h3 { color: var(--text-bright); margin: 16px 0 8px; font-size: 15px; }
+.spec-content p { margin: 0 0 12px; }
+.spec-content ul, .spec-content ol { padding-left: 22px; margin: 0 0 12px; }
+.spec-content code { background: var(--bg); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+.spec-content strong { color: var(--text-bright); }
+
+.verdict-pill {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+}
+.verdict-pill.APPROVED       { background: rgba(63,185,80,0.15); color: var(--success); }
+.verdict-pill.NEEDS_REVISION { background: rgba(210,153,34,0.15); color: var(--warning); }
+.verdict-pill.MAJOR_ISSUES   { background: rgba(248,81,73,0.15); color: var(--danger); }
+.verdict-pill.DETERMINISTIC  { background: rgba(88,166,255,0.15); color: var(--accent); }
+.verdict-pill.UNKNOWN        { background: var(--surface-2); color: var(--text-dim); }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script>
+(function(){
+  let currentKind = null;
+  let currentName = null;
+  let currentSpec = null;
+  let activeES = null;
+
+  document.querySelectorAll('.file-link').forEach(a => {
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.file-link').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+      currentKind = a.dataset.kind;
+      currentName = a.dataset.name;
+      if (activeES) { activeES.close(); activeES = null; }
+      await loadFile();
+    });
+  });
+
+  async function loadFile() {
+    document.getElementById('welcome').style.display = 'none';
+    document.getElementById('file-view').style.display = '';
+    document.getElementById('pipeline-status').style.display = 'none';
+    document.querySelectorAll('.agent-card').forEach(c => {
+      c.removeAttribute('data-state');
+      c.querySelector('.agent-state').textContent = 'idle';
+    });
+    setCodeContent('Click "Modernize" to generate.', true);
+    setCriticContent('Click "Modernize" to generate.', true);
+    document.getElementById('verdict-pill').style.display = 'none';
+    document.getElementById('copy-btn').style.display = 'none';
+    document.getElementById('download-btn').style.display = 'none';
+    document.getElementById('code-stats').textContent = '';
+
+    document.getElementById('fh-kind').textContent = currentKind.toUpperCase();
+    document.getElementById('fh-name').textContent = currentName;
+    document.getElementById('fh-target').textContent = '…';
+
+    const r = await fetch(`/api/modernize/${currentKind}/${encodeURIComponent(currentName)}/context`);
+    const j = await r.json();
+    document.getElementById('fh-target').textContent = (j.target && j.target.framework) || 'Java';
+    renderContext(j.context);
+    if (j.cached) {
+      currentSpec = j.cached;
+      renderSpec(j.cached);
+      document.getElementById('generate-btn').style.display = 'none';
+      document.getElementById('regenerate-btn').style.display = '';
+    } else {
+      document.getElementById('generate-btn').style.display = '';
+      document.getElementById('regenerate-btn').style.display = 'none';
+    }
+  }
+
+  function renderContext(ctx) {
+    const summary = ctx.summary || {};
+    const metaParts = [];
+    for (const k of ['paragraphs', 'steps', 'mapsets', 'total_defines', 'data_items', 'statements']) {
+      if (typeof summary[k] === 'number') metaParts.push(`${summary[k].toLocaleString()} ${k.replace(/_/g, ' ')}`);
+    }
+    document.getElementById('fh-meta').textContent = metaParts.join(' · ');
+
+    const kpis = [];
+    for (const [k, v] of Object.entries(summary)) {
+      if (typeof v === 'number') {
+        kpis.push(`<div class="kpi"><div class="kpi-num">${v.toLocaleString()}</div><div class="kpi-label">${k.replace(/_/g, ' ')}</div></div>`);
+      } else if (Array.isArray(v)) {
+        kpis.push(`<div class="kpi"><div class="kpi-num">${v.length}</div><div class="kpi-label">${k.replace(/_/g, ' ')}</div></div>`);
+      }
+    }
+    document.getElementById('ctx-summary').innerHTML = kpis.join('');
+  }
+
+  function renderSpec(spec) {
+    if (spec.code && spec.code.text) {
+      setCodeContent(spec.code.text, false);
+      document.getElementById('code-stats').textContent =
+        `${spec.code.line_count.toLocaleString()} lines · ${(spec.code.byte_count/1024).toFixed(1)} KB · ${spec.code.language} · ${spec.code.emitter}`;
+      document.getElementById('copy-btn').style.display = '';
+      document.getElementById('download-btn').style.display = '';
+    }
+    if (spec.critic_review) {
+      const critEl = document.getElementById('critic-content');
+      critEl.className = 'spec-content';
+      critEl.innerHTML = marked.parse(spec.critic_review.text || '');
+    }
+    if (spec.verdict) {
+      const v = document.getElementById('verdict-pill');
+      v.textContent = spec.verdict;
+      v.className = 'verdict-pill ' + spec.verdict;
+      v.style.display = '';
+    }
+  }
+
+  function setCodeContent(text, isEmpty) {
+    const el = document.getElementById('code-content');
+    el.innerHTML = isEmpty ? `<div class="code-empty">${text}</div>` : `<pre>${escapeHtml(text)}</pre>`;
+  }
+  function setCriticContent(text, isEmpty) {
+    const el = document.getElementById('critic-content');
+    el.className = isEmpty ? 'spec-content empty' : 'spec-content';
+    el.textContent = text;
+  }
+
+  function runGenerate(force) {
+    if (!currentKind || !currentName) return;
+    document.getElementById('generate-btn').disabled = true;
+    document.getElementById('regenerate-btn').disabled = true;
+    document.getElementById('pipeline-status').style.display = '';
+    document.querySelectorAll('.agent-card').forEach(c => {
+      c.setAttribute('data-state', '');
+      c.querySelector('.agent-state').textContent = 'queued…';
+    });
+
+    const url = `/api/modernize/${currentKind}/${encodeURIComponent(currentName)}/generate?force=${force ? 1 : 0}`;
+    activeES = new EventSource(url);
+
+    activeES.addEventListener('cached', (e) => {
+      const d = JSON.parse(e.data);
+      currentSpec = d.spec;
+      renderSpec(d.spec);
+      document.querySelectorAll('.agent-card').forEach(c => {
+        c.setAttribute('data-state', 'done');
+        c.querySelector('.agent-state').textContent = 'cached';
+      });
+    });
+    activeES.addEventListener('agent_start', (e) => {
+      const d = JSON.parse(e.data);
+      const card = document.querySelector(`.agent-card[data-agent="${d.agent}"]`);
+      if (card) { card.setAttribute('data-state', 'running'); card.querySelector('.agent-state').textContent = 'running…'; }
+    });
+    activeES.addEventListener('agent_done', (e) => {
+      const d = JSON.parse(e.data);
+      const card = document.querySelector(`.agent-card[data-agent="${d.agent}"]`);
+      if (card) { card.setAttribute('data-state', 'done'); card.querySelector('.agent-state').textContent = `${d.mode} · ${d.elapsed_s}s`; }
+    });
+    activeES.addEventListener('spec', (e) => {
+      const d = JSON.parse(e.data);
+      currentSpec = d.spec;
+      renderSpec(d.spec);
+    });
+    activeES.addEventListener('error', (e) => {
+      try { const d = JSON.parse(e.data); alert('Generation error: ' + d.message); } catch (_) {}
+    });
+    activeES.addEventListener('complete', () => {
+      activeES.close(); activeES = null;
+      document.getElementById('generate-btn').disabled = false;
+      document.getElementById('regenerate-btn').disabled = false;
+      document.getElementById('generate-btn').style.display = 'none';
+      document.getElementById('regenerate-btn').style.display = '';
+    });
+  }
+
+  document.getElementById('generate-btn').addEventListener('click', () => runGenerate(false));
+  document.getElementById('regenerate-btn').addEventListener('click', () => {
+    if (confirm('Regenerate? This burns API quota and may take 25-40s (instant for COBOL).')) runGenerate(true);
+  });
+
+  document.getElementById('copy-btn').addEventListener('click', async () => {
+    if (!currentSpec) return;
+    try { await navigator.clipboard.writeText(currentSpec.code.text); alert('Copied!'); }
+    catch (_) { alert('Copy failed — select & copy manually'); }
+  });
+  document.getElementById('download-btn').addEventListener('click', () => {
+    if (!currentSpec) return;
+    const blob = new Blob([currentSpec.code.text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const baseName = currentName.split('.')[0];
+    a.href = url; a.download = baseName[0].toUpperCase() + baseName.slice(1).toLowerCase() + (currentSpec.target.file_suffix || '.java');
+    a.click(); URL.revokeObjectURL(url);
+  });
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+{% endblock %}

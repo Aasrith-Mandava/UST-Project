@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+{% set active = 'pipeline' %}
+{% block title %}Run Pipeline · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Run Pipeline</h1>
+    <div class="subtitle">
+      Eight phases ingest the canonical CardDemo corpus end-to-end. Each phase emits a
+      structured outcome card so you can prove the artifact contract (§7 of the brief)
+      is satisfied. The full bundle — ANTLR ASTs, UUID-keyed graph, Mermaid diagrams,
+      grounded LLM specs, forward-engineered Java — appears below as it lands.
+    </div>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center;">
+    <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="opt-clean"> Clean output first
+    </label>
+    <button id="run-btn" class="btn btn-primary">Run pipeline</button>
+  </div>
+</div>
+
+{# ============================================================ #}
+{#               TOP: SUMMARY BANNER (post-run)                 #}
+{# ============================================================ #}
+<div id="summary-banner" class="summary-banner" style="display:none;">
+  <div class="sb-left">
+    <div class="sb-status" id="sb-status">RUN COMPLETE</div>
+    <div class="sb-detail" id="sb-detail">—</div>
+  </div>
+  <div class="sb-kpis">
+    <div class="sb-kpi"><div class="sb-kpi-num" id="sb-time">—</div><div class="sb-kpi-label">total time</div></div>
+    <div class="sb-kpi"><div class="sb-kpi-num" id="sb-nodes">—</div><div class="sb-kpi-label">graph nodes</div></div>
+    <div class="sb-kpi"><div class="sb-kpi-num" id="sb-grounded">—</div><div class="sb-kpi-label">avg grounding</div></div>
+    <div class="sb-kpi"><div class="sb-kpi-num" id="sb-contract">—</div><div class="sb-kpi-label">contract complete</div></div>
+  </div>
+</div>
+
+{# ============================================================ #}
+{#                    PHASE STEPPER + CONSOLE                   #}
+{# ============================================================ #}
+<div class="pipeline-grid">
+  <div class="card pipeline-card">
+    <div class="card-head">
+      <span class="card-title">Phases</span>
+      <span id="run-status" class="pill">idle</span>
+    </div>
+    <ol class="stepper" id="stepper">
+      {% for s in steps %}
+      <li data-id="{{ s.id }}" data-status="pending">
+        <span class="step-dot"></span>
+        <div class="step-body">
+          <div class="step-label">{{ loop.index }}. {{ s.label }}</div>
+          <div class="step-meta"></div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <div class="card pipeline-card">
+    <div class="card-head">
+      <span class="card-title">Live output</span>
+      <button id="clear-console" class="btn" style="padding:4px 10px; font-size:12px;">Clear</button>
+    </div>
+    <pre id="console" class="console">Click "Run pipeline" to start.</pre>
+  </div>
+</div>
+
+{# ============================================================ #}
+{#                 PER-PHASE OUTCOME CARDS                      #}
+{# ============================================================ #}
+<h2 style="margin-top: 32px;">Phase outcomes</h2>
+<p class="subtitle">Structured proof of what each phase produced. Cards populate live as each phase finishes.</p>
+
+<div class="outcomes-grid" id="outcomes-grid">
+  {% for s in steps %}
+  <div class="outcome-card" id="oc-{{ s.id }}" data-state="pending">
+    <div class="oc-head">
+      <div class="oc-num">{{ "%02d"|format(loop.index) }}</div>
+      <div>
+        <div class="oc-title">{{ s.label.split(' (')[0] }}</div>
+        <div class="oc-state">waiting</div>
+      </div>
+    </div>
+    <div class="oc-headline">—</div>
+    <div class="oc-body"></div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ============================================================ #}
+{#               DEMO READINESS + ARTIFACT CONTRACT             #}
+{# ============================================================ #}
+<h2 style="margin-top: 32px;">Demo readiness gates &nbsp;<span class="dim mono">(brief §10)</span></h2>
+<div class="grid-3" id="demo-gates">
+  <div class="card demo-gate" id="gate-spec-cobtrn"><div class="dg-label">Spec: COTRN02C</div><div class="dg-status">—</div></div>
+  <div class="card demo-gate" id="gate-spec-paragraph"><div class="dg-label">Spec: VALIDATE-INPUT-DATA-FIELDS</div><div class="dg-status">—</div></div>
+  <div class="card demo-gate" id="gate-spec-batch"><div class="dg-label">Spec: POSTTRAN → INTCALC → CREASTMT</div><div class="dg-status">—</div></div>
+  <div class="card demo-gate" id="gate-java"><div class="dg-label">Forward eng: Java emitted</div><div class="dg-status">—</div></div>
+  <div class="card demo-gate" id="gate-batch"><div class="dg-label">Forward eng: Spring Batch emitted</div><div class="dg-status">—</div></div>
+</div>
+
+<h2 style="margin-top: 32px;">Artifact contract checklist &nbsp;<span class="dim mono">(brief §7, Layers 1–8)</span></h2>
+<div class="contract-grid" id="contract-grid">
+  <div class="dim small" style="padding:20px;">Run the pipeline to populate this checklist.</div>
+</div>
+
+{# ============================================================ #}
+{#                EMBEDDED VISUALIZATIONS                       #}
+{# ============================================================ #}
+<h2 style="margin-top: 32px;">Generated visualizations</h2>
+<p class="subtitle">Embedded previews of the AST and call graph. Click any preview to open the full interactive view.</p>
+
+<div class="viz-grid">
+  <div class="card viz-card">
+    <div class="card-head">
+      <span class="card-title">AST preview — COTRN02C</span>
+      <a href="/programs/COTRN02C/ast" class="btn" style="padding:4px 10px; font-size:12px;">Open full AST →</a>
+    </div>
+    <div id="ast-preview" class="viz-canvas">Run pipeline to load AST.</div>
+  </div>
+  <div class="card viz-card">
+    <div class="card-head">
+      <span class="card-title">System call graph</span>
+      <a href="/call-graph" class="btn" style="padding:4px 10px; font-size:12px;">Open full graph →</a>
+    </div>
+    <div id="callgraph-preview" class="viz-canvas">Run pipeline to load call graph.</div>
+  </div>
+</div>
+
+<h2 style="margin-top: 32px;">Where to look next</h2>
+<div class="grid-3" id="next-actions">
+  <a class="card next-card" href="/specs/report"><div class="nc-title">Full Specification Report</div><div class="nc-desc">~270-page document aggregating every section — printable / PDF-ready</div></a>
+  <a class="card next-card" href="/file-specs"><div class="nc-title">Per-File Multi-Agent Specs</div><div class="nc-desc">Pick any file → 4 agents generate Business + Technical + Functional + Critic review</div></a>
+  <a class="card next-card" href="/repo"><div class="nc-title">Transform Code (Java Repo)</div><div class="nc-desc">39 programs forward-engineered into a Maven-laid-out Java project</div></a>
+  <a class="card next-card" href="/programs"><div class="nc-title">Programs</div><div class="nc-desc">Browse the 31 canonical COBOL programs; click into any for AST + paragraphs + calls</div></a>
+  <a class="card next-card" href="/diagrams"><div class="nc-title">Mermaid Diagrams</div><div class="nc-desc">Call graph, transaction flow, JCL chain, file I/O — rendered in the browser</div></a>
+  <a class="card next-card" href="/jobs"><div class="nc-title">JCL Jobs</div><div class="nc-desc">38 batch jobs with step / DD / dataset detail</div></a>
+</div>
+
+<style>
+.summary-banner {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 0 0 1px rgba(88,166,255,0.15);
+}
+.summary-banner.failed { border-color: var(--danger); box-shadow: 0 0 0 1px rgba(248,81,73,0.15); }
+.sb-left { flex: 1; min-width: 0; }
+.sb-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  font-weight: 700;
+}
+.summary-banner.failed .sb-status { color: var(--danger); }
+.sb-detail { font-size: 18px; color: var(--text-bright); margin-top: 4px; }
+.sb-kpis { display: flex; gap: 14px; flex-shrink: 0; }
+.sb-kpi { text-align: center; min-width: 80px; padding: 4px 14px; border-left: 1px solid var(--border); }
+.sb-kpi:first-child { border-left: none; }
+.sb-kpi-num { font-size: 20px; font-weight: 700; color: var(--text-bright); line-height: 1; }
+.sb-kpi-label { font-size: 10px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.outcomes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 12px;
+}
+.outcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  transition: border-color 0.15s;
+}
+.outcome-card[data-state="done"] { border-color: rgba(63,185,80,0.4); }
+.outcome-card[data-state="failed"] { border-color: var(--danger); }
+.outcome-card[data-state="running"] { border-color: var(--accent); }
+.oc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.oc-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.oc-title { font-size: 14px; font-weight: 600; color: var(--text-bright); }
+.oc-state { font-size: 11px; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+.outcome-card[data-state="done"] .oc-state { color: var(--success); }
+.outcome-card[data-state="failed"] .oc-state { color: var(--danger); }
+.outcome-card[data-state="running"] .oc-state { color: var(--accent); }
+.oc-headline {
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--mono);
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  margin: 8px 0;
+}
+.oc-body { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+.oc-body table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.oc-body th, .oc-body td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+.oc-body th { font-weight: 600; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.oc-body .right { text-align: right; font-family: var(--mono); }
+.oc-rule {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(88,166,255,0.08);
+  border-left: 2px solid var(--accent);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.demo-gate {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dg-label { font-size: 13px; color: var(--text-bright); font-weight: 500; }
+.dg-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.dg-status.ok { color: var(--success); }
+.dg-status.fail { color: var(--danger); }
+.dg-status::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--surface-3);
+}
+.dg-status.ok::before { background: var(--success); }
+.dg-status.fail::before { background: var(--danger); }
+.demo-gate a { color: var(--accent); font-size: 11px; margin-left: auto; text-decoration: none; }
+.demo-gate a:hover { text-decoration: underline; }
+
+.contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.contract-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: var(--mono);
+  border-radius: 4px;
+}
+.contract-row:hover { background: var(--surface-2); }
+.contract-row .dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--surface-3);
+}
+.contract-row.satisfied .dot { background: var(--success); }
+.contract-row.satisfied { color: var(--text); }
+.contract-row:not(.satisfied) { color: var(--text-dim); }
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.viz-card { padding: 0; overflow: hidden; }
+.viz-card .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.viz-canvas {
+  width: 100%;
+  height: 360px;
+  background: #010409;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.next-card {
+  padding: 18px 20px;
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+  display: block;
+}
+.next-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+.nc-title { font-size: 14px; font-weight: 600; color: var(--text-bright); margin-bottom: 6px; }
+.nc-desc { font-size: 12px; color: var(--text-dim); line-height: 1.55; }
+
+@media (max-width: 1000px) {
+  .outcomes-grid, .viz-grid, .contract-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script>
+(function(){
+  const btn = document.getElementById('run-btn');
+  const cleanBox = document.getElementById('opt-clean');
+  const stepper = document.getElementById('stepper');
+  const consoleEl = document.getElementById('console');
+  const statusEl = document.getElementById('run-status');
+  const clearBtn = document.getElementById('clear-console');
+  const banner = document.getElementById('summary-banner');
+
+  function setStep(id, status, meta) {
+    const li = stepper.querySelector(`li[data-id="${id}"]`);
+    if (!li) return;
+    li.dataset.status = status;
+    if (meta !== undefined) li.querySelector('.step-meta').textContent = meta;
+    const card = document.getElementById('oc-' + id);
+    if (card) {
+      card.dataset.state = status;
+      const stateEl = card.querySelector('.oc-state');
+      if (status === 'running') stateEl.textContent = 'running…';
+      else if (status === 'done') stateEl.textContent = meta || 'done';
+      else if (status === 'failed') stateEl.textContent = meta || 'failed';
+    }
+  }
+  function appendLog(stepId, line) {
+    const wasAtBottom = consoleEl.scrollTop + consoleEl.clientHeight >= consoleEl.scrollHeight - 4;
+    consoleEl.textContent += `[${stepId}] ${line}\n`;
+    if (wasAtBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+  function statusPill(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = 'pill ' + cls;
+  }
+  function resetUI() {
+    consoleEl.textContent = '';
+    banner.style.display = 'none';
+    banner.classList.remove('failed');
+    stepper.querySelectorAll('li').forEach(l => {
+      l.dataset.status = 'pending';
+      l.querySelector('.step-meta').textContent = '';
+    });
+    document.querySelectorAll('.outcome-card').forEach(c => {
+      c.dataset.state = 'pending';
+      c.querySelector('.oc-state').textContent = 'waiting';
+      c.querySelector('.oc-headline').textContent = '—';
+      c.querySelector('.oc-body').innerHTML = '';
+    });
+    document.querySelectorAll('.demo-gate .dg-status').forEach(s => {
+      s.className = 'dg-status';
+      s.textContent = '—';
+    });
+    document.getElementById('contract-grid').innerHTML =
+      '<div class="dim small" style="padding:20px;">Run in progress…</div>';
+  }
+  clearBtn.addEventListener('click', () => { consoleEl.textContent = ''; });
+
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    cleanBox.disabled = true;
+    resetUI();
+    statusPill('running', 'warn');
+
+    const url = '/api/pipeline/stream' + (cleanBox.checked ? '?clean=1' : '');
+    const es = new EventSource(url);
+    let done = false;
+
+    es.addEventListener('start', e => {
+      const d = JSON.parse(e.data);
+      appendLog('pipeline', `starting ${d.steps.length} phases${d.clean ? ' (clean rebuild)' : ''}`);
+    });
+    es.addEventListener('step', e => {
+      const d = JSON.parse(e.data);
+      let meta = '';
+      if (d.status === 'running') meta = 'running…';
+      else if (d.status === 'done') meta = (d.duration_s != null ? d.duration_s + 's' : '');
+      else if (d.status === 'failed') meta = 'failed' + (d.code != null ? ' (code ' + d.code + ')' : '');
+      setStep(d.id, d.status, meta);
+    });
+    es.addEventListener('log', e => {
+      const d = JSON.parse(e.data);
+      appendLog(d.id, d.line);
+    });
+    es.addEventListener('outcome', e => {
+      const d = JSON.parse(e.data);
+      renderOutcome(d.id, d.outcome);
+    });
+    es.addEventListener('summary', e => {
+      const d = JSON.parse(e.data);
+      renderSummary(d);
+    });
+    es.addEventListener('complete', async e => {
+      done = true;
+      const d = JSON.parse(e.data);
+      es.close();
+      btn.disabled = false;
+      cleanBox.disabled = false;
+      statusPill(d.ok ? 'complete' : 'failed', d.ok ? 'success' : 'warn');
+      banner.style.display = 'flex';
+      if (!d.ok) banner.classList.add('failed');
+      document.getElementById('sb-status').textContent = d.ok ? '✓ RUN COMPLETE' : '✗ RUN FAILED';
+      document.getElementById('sb-detail').textContent = d.ok
+        ? 'All 8 phases finished. Artifact bundle ready.'
+        : 'A phase failed — see console.';
+      document.getElementById('sb-time').textContent = d.total_s + 's';
+      // Load embedded previews
+      loadAstPreview();
+      loadCallGraphPreview();
+    });
+    es.onerror = () => {
+      if (done) return;
+      es.close();
+      btn.disabled = false;
+      cleanBox.disabled = false;
+      statusPill('stream dropped — click Run to retry', 'warn');
+      appendLog('pipeline', 'stream disconnected (server restart, network drop, or backend exit). Click "Run pipeline" to retry.');
+    };
+  });
+
+  // ============================================================
+  //  Render a per-phase outcome card
+  // ============================================================
+  function renderOutcome(stepId, outcome) {
+    const card = document.getElementById('oc-' + stepId);
+    if (!card) return;
+    const headlineEl = card.querySelector('.oc-headline');
+    const bodyEl = card.querySelector('.oc-body');
+    if (outcome.error) {
+      headlineEl.textContent = 'extractor error: ' + outcome.error;
+      bodyEl.innerHTML = '';
+      return;
+    }
+    headlineEl.textContent = outcome.headline || '(no headline)';
+
+    const blocks = [];
+    if (outcome.per_type) {
+      blocks.push('<table><tbody>' +
+        Object.entries(outcome.per_type).map(([k, v]) => {
+          if (typeof v === 'object') {
+            return `<tr><td>${k}</td><td class="right">${v.parsed}/${v.total}</td><td class="right">${v.pct}%</td></tr>`;
+          }
+          return `<tr><td>${k}</td><td class="right">${v}</td></tr>`;
+        }).join('') + '</tbody></table>');
+    }
+    if (outcome.tables) {
+      blocks.push('<table><thead><tr><th>Table</th><th class="right">Rows</th></tr></thead><tbody>' +
+        Object.entries(outcome.tables).map(([k, v]) => `<tr><td>${k}</td><td class="right">${v.toLocaleString()}</td></tr>`).join('') +
+        '</tbody></table>');
+    }
+    if (outcome.node_kinds) {
+      blocks.push('<table><thead><tr><th>Node kind</th><th class="right">Count</th></tr></thead><tbody>' +
+        outcome.node_kinds.map(n => `<tr><td>${n.kind}</td><td class="right">${n.count.toLocaleString()}</td></tr>`).join('') +
+        '</tbody></table>');
+    }
+    if (outcome.specs) {
+      blocks.push('<table><thead><tr><th>Spec</th><th class="right">Mode</th><th class="right">Grounded</th></tr></thead><tbody>' +
+        outcome.specs.map(s => {
+          if (s.status !== 'ok') return `<tr><td>${s.label}</td><td colspan="2" class="right">${s.status}</td></tr>`;
+          return `<tr><td>${s.label}</td><td class="right">${s.mode}</td><td class="right">${s.grounding_pct}% (${s.resolved}/${s.references})</td></tr>`;
+        }).join('') + '</tbody></table>');
+    }
+    if (outcome.files) {
+      blocks.push('<table><thead><tr><th>File</th><th class="right">Bytes</th></tr></thead><tbody>' +
+        outcome.files.map(f => `<tr><td>${f.name}</td><td class="right">${f.bytes.toLocaleString()}</td></tr>`).join('') +
+        '</tbody></table>');
+    }
+    if (outcome.failures && outcome.failures.length) {
+      blocks.push('<div style="margin-top:8px;color:var(--danger);font-size:11px;">Failures: ' + outcome.failures.join(', ') + '</div>');
+    }
+    if (outcome.rule_satisfied) {
+      blocks.push(`<div class="oc-rule">✓ ${outcome.rule_satisfied}</div>`);
+    }
+    if (outcome.view_url) {
+      blocks.push(`<a href="${outcome.view_url}" style="display:inline-block;margin-top:8px;font-size:12px;color:var(--accent);">View →</a>`);
+    }
+    bodyEl.innerHTML = blocks.join('');
+  }
+
+  // ============================================================
+  //  Render the final summary: demo gates + contract checklist
+  // ============================================================
+  function renderSummary(s) {
+    const g = s.demo_gates || {};
+    setGate('gate-spec-cobtrn',     g.spec_cotrn02c,    s.links?.spec_cotrn02c);
+    setGate('gate-spec-paragraph',  g.spec_paragraph,   s.links?.spec_cotrn02c);
+    setGate('gate-spec-batch',      g.spec_batch_chain, s.links?.spec_cotrn02c);
+    setGate('gate-java',            g.forward_eng_java, s.links?.java_repo);
+    setGate('gate-batch',           g.forward_eng_batch, s.links?.java_repo);
+
+    const cc = s.contract_completeness || {};
+    document.getElementById('sb-contract').textContent =
+      (cc.satisfied || 0) + ' / ' + (cc.total || 0);
+
+    const grid = document.getElementById('contract-grid');
+    grid.innerHTML = '';
+    const c = s.artifact_contract || {};
+    for (const [label, satisfied] of Object.entries(c)) {
+      const row = document.createElement('div');
+      row.className = 'contract-row' + (satisfied ? ' satisfied' : '');
+      row.innerHTML = `<span class="dot"></span><span>${label}</span>`;
+      grid.appendChild(row);
+    }
+  }
+  function setGate(id, ok, link) {
+    const el = document.querySelector(`#${id} .dg-status`);
+    if (!el) return;
+    el.className = 'dg-status ' + (ok ? 'ok' : 'fail');
+    el.textContent = ok ? 'ready' : 'missing';
+    if (ok && link) {
+      const a = document.createElement('a');
+      a.href = link; a.textContent = ' open →';
+      el.appendChild(a);
+    }
+  }
+
+  // ============================================================
+  //  Embedded visualization previews (after run completes)
+  // ============================================================
+  async function loadAstPreview() {
+    const container = document.getElementById('ast-preview');
+    try {
+      const r = await fetch('/api/programs/COTRN02C/ast?max_nodes=80');
+      if (!r.ok) throw new Error('not ready');
+      const d = await r.json();
+      container.innerHTML = '';
+      container.style.cssText = 'width:100%;height:360px;background:#010409;';
+      cytoscape({
+        container,
+        elements: d.elements,
+        style: [
+          { selector: 'node', style: {
+              'background-color': ele => ({
+                CompilationUnit: '#a371f7', ProgramUnit: '#a371f7',
+                DataDivision: '#d29922', ProcedureDivision: '#58a6ff',
+                Paragraph: '#58a6ff', Statement: '#8b949e',
+                DataItem: '#3fb950', ExecCicsBlock: '#db6d28',
+              }[ele.data('kind')] || '#8b949e'),
+              'width': 10, 'height': 10, 'border-width': 1, 'border-color': '#30363d',
+          }},
+          { selector: 'edge', style: {
+              'width': 0.6, 'line-color': '#30363d', 'curve-style': 'bezier',
+              'target-arrow-shape': 'triangle', 'target-arrow-color': '#30363d', 'arrow-scale': 0.4,
+          }},
+        ],
+        layout: { name: 'dagre', rankDir: 'TB', nodeSep: 6, rankSep: 18, fit: true },
+        wheelSensitivity: 0.2,
+      });
+    } catch (_) {
+      container.textContent = 'AST not yet available — run the pipeline first.';
+    }
+  }
+
+  async function loadCallGraphPreview() {
+    const container = document.getElementById('callgraph-preview');
+    try {
+      const r = await fetch('/api/graph/calls');
+      if (!r.ok) throw new Error('not ready');
+      const d = await r.json();
+      container.innerHTML = '';
+      container.style.cssText = 'width:100%;height:360px;background:#010409;';
+      cytoscape({
+        container,
+        elements: d.elements,
+        style: [
+          { selector: 'node', style: {
+              'background-color': ele => ele.data('parsed') ? '#58a6ff' : '#8b949e',
+              'label': 'data(label)', 'color': '#f0f6fc', 'font-size': '8px',
+              'text-valign': 'center', 'text-halign': 'center',
+              'text-outline-color': '#0d1117', 'text-outline-width': 1,
+              'width': 18, 'height': 18,
+          }},
+          { selector: 'edge', style: {
+              'width': 1, 'line-color': '#3fb950', 'curve-style': 'bezier',
+              'target-arrow-shape': 'triangle', 'target-arrow-color': '#3fb950', 'arrow-scale': 0.5,
+          }},
+        ],
+        layout: { name: 'cose', animate: false, idealEdgeLength: 60, nodeRepulsion: 6000, fit: true },
+        wheelSensitivity: 0.2,
+      });
+    } catch (_) {
+      container.textContent = 'Call graph not yet available — run the pipeline first.';
+    }
+  }
+
+  // Auto-load previews if pipeline has already been run (page reload after success)
+  setTimeout(() => {
+    fetch('/api/programs/COTRN02C/ast?max_nodes=10').then(r => {
+      if (r.ok) { loadAstPreview(); loadCallGraphPreview(); }
+    });
+  }, 200);
+})();
+</script>
+{% endblock %}

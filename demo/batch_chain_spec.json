@@ -1,0 +1,226 @@
+{
+  "target": "POSTTRAN -> INTCALC -> CREASTMT",
+  "mode": "live:gemini/gemini-2.5-flash",
+  "response_text": "{\n  \"chain\": [\n    \"POSTTRAN\",\n    \"INTCALC\",\n    \"CREASTMT\"\n  ],\n  \"overview\": \"This batch chain processes daily financial transactions, calculates accrued interest, and generates customer statements. It updates core financial records, applies interest calculations to customer accounts, and then consolidates transaction and account data to produce final statements.\",\n  \"jobs\": [\n    {\n      \"job_name\": \"POSTTRAN\",\n      \"purpose\": \"Posts daily transactions from an input file to update account balances, transaction history, and category balances in VSAM files.\",\n      \"programs\": [\n        {\n          \"name\": \"CBTRN02C\",\n          \"uuid\": \"b173b980-6330-1619-d02d-443c046b3561\",\n          \"step\": \"STEP15\",\n          \"purpose\": \"Reads daily transaction data and updates various VSAM files, including account, transaction, and category balance files.\"\n        }\n      ],\n      \"consumes\": [\n        {\n          \"dd_name\": \"ACCTFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"DALYTRAN\",\n          \"dsn\": \"AWS.M2.CARDDEMO.DALYTRAN.PS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"TCATBALF\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"TRANFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"XREFFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        }\n      ],\n      \"produces\": []\n    },\n    {\n      \"job_name\": \"INTCALC\",\n      \"purpose\": \"Calculates and applies interest to customer accounts based on current balances and discount groups.\",\n      \"programs\": [\n        {\n          \"name\": \"CBACT04C\",\n          \"uuid\": \"5dd6a046-ba7e-34da-26b9-a46e3f32fcd2\",\n          \"step\": \"STEP15\",\n          \"purpose\": \"Processes account data to calculate and apply interest, updating account and category balance files.\"\n        }\n      ],\n      \"consumes\": [\n        {\n          \"dd_name\": \"ACCTFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"DISCGRP\",\n          \"dsn\": \"AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"TCATBALF\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"XREFFIL1\",\n          \"dsn\": \"AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"XREFFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        }\n      ],\n      \"produces\": []\n    },\n    {\n      \"job_name\": \"CREASTMT\",\n      \"purpose\": \"Prepares and generates customer statements by sorting transactions, converting them to VSAM, and compiling relevant account and customer information.\",\n      \"programs\": [\n        {\n          \"name\": \"IDCAMS\",\n          \"uuid\": null,\n          \"step\": \"DELDEF01\",\n          \"purpose\": \"Deletes and defines datasets using IDCAMS.\"\n        },\n        {\n          \"name\": \"SORT\",\n          \"uuid\": null,\n          \"step\": \"STEP010\",\n          \"purpose\": \"Sorts transaction records for subsequent statement generation.\"\n        },\n        {\n          \"name\": \"IDCAMS\",\n          \"uuid\": null,\n          \"step\": \"STEP020\",\n          \"purpose\": \"Converts sorted sequential transaction data into a VSAM KSDS file.\"\n        },\n        {\n          \"name\": \"IEFBR14\",\n          \"uuid\": null,\n          \"step\": \"STEP030\",\n          \"purpose\": \"Manages dataset allocation or deallocation tasks.\"\n        },\n        {\n          \"name\": \"CBSTM03A\",\n          \"uuid\": \"98cd097a-95da-4e06-1572-7613d3b00bde\",\n          \"step\": \"STEP040\",\n          \"purpose\": \"Generates customer statements by consolidating account, customer, and processed transaction data.\"\n        }\n      ],\n      \"consumes\": [\n        {\n          \"dd_name\": \"SORTIN\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"INFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRXFL.SEQ\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"ACCTFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"CUSTFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"TRNXFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        },\n        {\n          \"dd_name\": \"XREFFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS\",\n          \"disp\": \"SHR\"\n        }\n      ],\n      \"produces\": [\n        {\n          \"dd_name\": \"SORTOUT\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRXFL.SEQ\",\n          \"disp\": \"NEW,CATLG\"\n        },\n        {\n          \"dd_name\": \"OUTFILE\",\n          \"dsn\": \"AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS\",\n          \"disp\": \"NEW,CATLG\"\n        }\n      ]\n    }\n  ],\n  \"dataset_handoffs\": [\n    {\n      \"from_job\": \"POSTTRAN\",\n      \"from_dd\": \"TRANFILE\",\n      \"to_job\": \"CREASTMT\",\n      \"to_dd\": \"SORTIN\",\n      \"dataset\": \"AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS\"\n    },\n    {\n      \"from_job\": \"POSTTRAN\",\n      \"from_dd\": \"ACCTFILE\",\n      \"to_job\": \"INTCALC\",\n      \"to_dd\": \"ACCTFILE\",\n      \"dataset\": \"AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS\"\n    },\n    {\n      \"from_job\": \"INTCALC\",\n      \"from_dd\": \"ACCTFILE\",\n      \"to_job\": \"CREASTMT\",\n      \"to_dd\": \"ACCTFILE\",\n      \"dataset\": \"AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS\"\n    },\n    {\n      \"from_job\": \"POSTTRAN\",\n      \"from_dd\": \"TCATBALF\",\n      \"to_job\": \"INTCALC\",\n      \"to_dd\": \"TCATBALF\",\n      \"dataset\": \"AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS\"\n    }\n  ],\n  \"migration_risks\": [\n    \"Re-implementing COBOL programs with VSAM KSDS interactions in a new environment.\",\n    \"Replacing IBM utility programs (IDCAMS, SORT, IEFBR14) with equivalent modern tools or custom Java code.\",\n    \"Managing VSAM KSDS data structures, including alternate indexes (AIX PATH), and ensuring data integrity.\",\n    \"Ensuring transactional consistency across multiple dataset updates.\"\n  ],\n  \"spring_batch_hint\": \"The chain should be structured as a sequence of Spring Batch Jobs, each corresponding to a mainframe job. Each mainframe step involving a COBOL program that processes data should be a chunk-oriented step, utilizing appropriate ItemReaders for input and ItemWriters for updating VSAM files. Utility steps like IDCAMS, SORT, and IEFBR14 can be implemented as Tasklets, wrapping shell scripts or custom Java logic for file operations. Ensure proper transaction management and data integrity, especially for concurrent updates to shared VSAM resources, potentially using partitioning for large KSDS files.\"\n}",
+  "spec": {
+    "chain": [
+      "POSTTRAN",
+      "INTCALC",
+      "CREASTMT"
+    ],
+    "overview": "This batch chain processes daily financial transactions, calculates accrued interest, and generates customer statements. It updates core financial records, applies interest calculations to customer accounts, and then consolidates transaction and account data to produce final statements.",
+    "jobs": [
+      {
+        "job_name": "POSTTRAN",
+        "purpose": "Posts daily transactions from an input file to update account balances, transaction history, and category balances in VSAM files.",
+        "programs": [
+          {
+            "name": "CBTRN02C",
+            "uuid": "b173b980-6330-1619-d02d-443c046b3561",
+            "step": "STEP15",
+            "purpose": "Reads daily transaction data and updates various VSAM files, including account, transaction, and category balance files."
+          }
+        ],
+        "consumes": [
+          {
+            "dd_name": "ACCTFILE",
+            "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "DALYTRAN",
+            "dsn": "AWS.M2.CARDDEMO.DALYTRAN.PS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "TCATBALF",
+            "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "TRANFILE",
+            "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "XREFFILE",
+            "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+            "disp": "SHR"
+          }
+        ],
+        "produces": []
+      },
+      {
+        "job_name": "INTCALC",
+        "purpose": "Calculates and applies interest to customer accounts based on current balances and discount groups.",
+        "programs": [
+          {
+            "name": "CBACT04C",
+            "uuid": "5dd6a046-ba7e-34da-26b9-a46e3f32fcd2",
+            "step": "STEP15",
+            "purpose": "Processes account data to calculate and apply interest, updating account and category balance files."
+          }
+        ],
+        "consumes": [
+          {
+            "dd_name": "ACCTFILE",
+            "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "DISCGRP",
+            "dsn": "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "TCATBALF",
+            "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "XREFFIL1",
+            "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "XREFFILE",
+            "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+            "disp": "SHR"
+          }
+        ],
+        "produces": []
+      },
+      {
+        "job_name": "CREASTMT",
+        "purpose": "Prepares and generates customer statements by sorting transactions, converting them to VSAM, and compiling relevant account and customer information.",
+        "programs": [
+          {
+            "name": "IDCAMS",
+            "uuid": null,
+            "step": "DELDEF01",
+            "purpose": "Deletes and defines datasets using IDCAMS."
+          },
+          {
+            "name": "SORT",
+            "uuid": null,
+            "step": "STEP010",
+            "purpose": "Sorts transaction records for subsequent statement generation."
+          },
+          {
+            "name": "IDCAMS",
+            "uuid": null,
+            "step": "STEP020",
+            "purpose": "Converts sorted sequential transaction data into a VSAM KSDS file."
+          },
+          {
+            "name": "IEFBR14",
+            "uuid": null,
+            "step": "STEP030",
+            "purpose": "Manages dataset allocation or deallocation tasks."
+          },
+          {
+            "name": "CBSTM03A",
+            "uuid": "98cd097a-95da-4e06-1572-7613d3b00bde",
+            "step": "STEP040",
+            "purpose": "Generates customer statements by consolidating account, customer, and processed transaction data."
+          }
+        ],
+        "consumes": [
+          {
+            "dd_name": "SORTIN",
+            "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "INFILE",
+            "dsn": "AWS.M2.CARDDEMO.TRXFL.SEQ",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "ACCTFILE",
+            "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "CUSTFILE",
+            "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "TRNXFILE",
+            "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
+            "disp": "SHR"
+          },
+          {
+            "dd_name": "XREFFILE",
+            "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+            "disp": "SHR"
+          }
+        ],
+        "produces": [
+          {
+            "dd_name": "SORTOUT",
+            "dsn": "AWS.M2.CARDDEMO.TRXFL.SEQ",
+            "disp": "NEW,CATLG"
+          },
+          {
+            "dd_name": "OUTFILE",
+            "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
+            "disp": "NEW,CATLG"
+          }
+        ]
+      }
+    ],
+    "dataset_handoffs": [
+      {
+        "from_job": "POSTTRAN",
+        "from_dd": "TRANFILE",
+        "to_job": "CREASTMT",
+        "to_dd": "SORTIN",
+        "dataset": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS"
+      },
+      {
+        "from_job": "POSTTRAN",
+        "from_dd": "ACCTFILE",
+        "to_job": "INTCALC",
+        "to_dd": "ACCTFILE",
+        "dataset": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+      },
+      {
+        "from_job": "INTCALC",
+        "from_dd": "ACCTFILE",
+        "to_job": "CREASTMT",
+        "to_dd": "ACCTFILE",
+        "dataset": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+      },
+      {
+        "from_job": "POSTTRAN",
+        "from_dd": "TCATBALF",
+        "to_job": "INTCALC",
+        "to_dd": "TCATBALF",
+        "dataset": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS"
+      }
+    ],
+    "migration_risks": [
+      "Re-implementing COBOL programs with VSAM KSDS interactions in a new environment.",
+      "Replacing IBM utility programs (IDCAMS, SORT, IEFBR14) with equivalent modern tools or custom Java code.",
+      "Managing VSAM KSDS data structures, including alternate indexes (AIX PATH), and ensuring data integrity.",
+      "Ensuring transactional consistency across multiple dataset updates."
+    ],
+    "spring_batch_hint": "The chain should be structured as a sequence of Spring Batch Jobs, each corresponding to a mainframe job. Each mainframe step involving a COBOL program that processes data should be a chunk-oriented step, utilizing appropriate ItemReaders for input and ItemWriters for updating VSAM files. Utility steps like IDCAMS, SORT, and IEFBR14 can be implemented as Tasklets, wrapping shell scripts or custom Java logic for file operations. Ensure proper transaction management and data integrity, especially for concurrent updates to shared VSAM resources, potentially using partitioning for large KSDS files."
+  },
+  "uuids_referenced": [
+    "b173b980-6330-1619-d02d-443c046b3561",
+    "5dd6a046-ba7e-34da-26b9-a46e3f32fcd2",
+    "98cd097a-95da-4e06-1572-7613d3b00bde"
+  ],
+  "grounding": {
+    "references": 3,
+    "resolved": 3,
+    "unresolved": [],
+    "by_kind": {
+      "CompilationUnit": 3
+    },
+    "pct": 100.0
+  }
+}

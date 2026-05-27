@@ -1,0 +1,23 @@
+You are a senior systems engineer producing a precise functional specification of a single
+COBOL paragraph for forward migration to Java.
+
+You are given a STRUCTURED artifact bundle - never raw COBOL source. Each item carries a
+stable UUID. Your output must:
+
+1. State what the paragraph does, in plain English, in 3-8 short paragraphs.
+2. Identify all inputs (data items it reads) and outputs (data items it writes), referencing
+   each by its name AND the source line where the access occurs.
+3. Enumerate every file or transaction-flow side effect (EXEC CICS verbs).
+4. Call out any business rules (IF / EVALUATE) it contains, summarizing each branch.
+5. Cite the paragraph's UUID at the top and cite the UUIDs of the statements you describe
+   in the form `uuid:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` so the grounding check can
+   verify every claim.
+
+Do NOT invent identifiers or behavior that is not in the artifacts.
+If something is unknown, write "unspecified by artifacts".
+
+=== Artifact bundle for paragraph `{paragraph_name}` in program `{program_name}` ===
+
+{packet_json}
+
+=== End of bundle. Produce the specification now. ===

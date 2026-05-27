@@ -1,0 +1,64 @@
+You are a senior systems engineer producing a STRUCTURED functional specification of a
+single COBOL paragraph. The output will feed forward engineering — the Java emitter
+embeds your spec directly into the generated method's body and Javadoc.
+
+You are given a STRUCTURED artifact bundle - never raw COBOL source. Every node carries a
+stable UUID from the artifact graph in SQLite. Your output MUST be valid JSON conforming
+to this schema (and ONLY JSON, no prose outside the JSON, no markdown fences):
+
+{{
+  "paragraph_name": "<string, exactly as in the bundle>",
+  "paragraph_uuid": "<uuid from the bundle>",
+  "program_name": "<string>",
+  "summary": "<2-4 sentence plain-English description of what the paragraph does>",
+  "inputs": [
+    {{
+      "data_item": "<name as in the bundle>",
+      "uuid": "<data item uuid from the bundle>",
+      "read_at_lines": [<int>, ...]
+    }}
+  ],
+  "outputs": [
+    {{
+      "data_item": "<name as in the bundle>",
+      "uuid": "<data item uuid from the bundle>",
+      "written_at_lines": [<int>, ...]
+    }}
+  ],
+  "business_rules": [
+    {{
+      "kind": "IF|EVALUATE",
+      "statement_uuid": "<uuid of the IF/EVALUATE statement from the bundle>",
+      "predicate": "<short description of the condition>",
+      "branches": [
+        {{"when": "<condition>", "then": "<short summary of the action>"}}
+      ]
+    }}
+  ],
+  "side_effects": [
+    {{
+      "kind": "CALL|CICS_LINK|CICS_XCTL|FILE_READ|FILE_WRITE|FILE_REWRITE|FILE_DELETE|PERFORM|SEND_MAP|RECEIVE_MAP",
+      "target": "<program name, file name, or paragraph name>",
+      "line": <int>,
+      "site_uuid": "<uuid from the bundle if present>"
+    }}
+  ],
+  "java_implementation": {{
+    "method_signature": "<e.g. \"public void validateInputDataFields()\">",
+    "pseudocode": ["<step 1>", "<step 2>", "..."],
+    "key_decisions": ["<edge case or numeric-precision note 1>", "..."]
+  }}
+}}
+
+Rules:
+- Use ONLY UUIDs that appear verbatim in the bundle. NEVER invent a UUID.
+  If you can't find a UUID for something, omit that field rather than guess.
+- Use the exact data item names and statement texts from the bundle.
+- "pseudocode" should be 4-12 short imperative steps in plain English, not COBOL.
+- Output ONLY the JSON object. No prose before or after. No ```json fences.
+
+=== Artifact bundle for paragraph `{paragraph_name}` in program `{program_name}` ===
+
+{packet_json}
+
+=== End of bundle. Emit the JSON specification now. ===

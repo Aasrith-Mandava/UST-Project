@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set active = 'copybooks' %}
+{% block title %}Copybooks · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Copybooks</h1>
+    <div class="meta">{{ copybooks|length }} copybooks across the corpus, {{ total_uses }} program-copybook edges (with full REPLACING provenance preserved)</div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Copybook</th><th class="right">Consumers</th><th>Programs that COPY it</th></tr></thead>
+    <tbody>
+      {% for cb in copybooks %}
+      <tr>
+        <td class="mono"><strong>{{ cb.name }}</strong></td>
+        <td class="right mono">{{ cb.consumers|length }}</td>
+        <td class="dim">{% for p in cb.consumers %}<a href="/programs/{{ p }}">{{ p }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

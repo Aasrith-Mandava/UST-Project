@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% set active = 'diagrams' %}
+{% block title %}Diagrams · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Diagrams</h1>
+    <div class="meta">
+      Every diagram in the system, in one place. Choose <b>Global</b> for whole-corpus
+      Mermaid diagrams, or <b>Per program</b> to drill into AST, call graph, control
+      flow, file I/O and data flow for any one program.
+    </div>
+  </div>
+</div>
+
+{# ============================================================ #}
+{#   MODE SWITCH: Global (whole corpus) vs Per program (file)   #}
+{# ============================================================ #}
+<div class="mode-switch" role="tablist" aria-label="Diagram scope">
+  <button class="mode-btn active" data-mode="global">Global</button>
+  <button class="mode-btn" data-mode="program">Per program</button>
+</div>
+
+{# ============================================================================
+    GLOBAL MODE — the original 4 corpus-wide Mermaid diagrams
+   ============================================================================ #}
+<section class="mode-pane" data-mode-pane="global">
+  <div class="tabs" data-tabset="global">
+    {% for d in diagrams %}
+    <div class="tab {% if loop.first %}active{% endif %}" data-tab="g-{{ d.id }}">{{ d.label }}</div>
+    {% endfor %}
+  </div>
+
+  {% for d in diagrams %}
+  <div class="tab-content {% if loop.first %}active{% endif %}" data-tab="g-{{ d.id }}">
+    <p class="subtitle">{{ d.description }}</p>
+    <pre class="mermaid-source" id="src-g-{{ d.id }}" style="display:none;">{{ d.mermaid_source }}</pre>
+    <div class="mermaid-wrap">
+      <div id="render-g-{{ d.id }}" class="diagram-render" data-rendered="false">
+        <div class="diagram-loading">Loading {{ d.label }}…</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+{# ============================================================================
+    PER-PROGRAM MODE — pick a program, render all diagrams for that file
+   ============================================================================ #}
+<section class="mode-pane" data-mode-pane="program" style="display:none;">
+  <div class="picker-row">
+    <div class="picker-col">
+      <label class="picker-label" for="prog-search">Filter programs</label>
+      <input id="prog-search" type="search" placeholder="Filter… e.g. COTRN02C, CBACT01C"
+             autocomplete="off" spellcheck="false" />
+      <label class="picker-label" for="prog-select" style="margin-top:6px;">Program ({{ programs|length }})</label>
+      <select id="prog-select" size="14">
+        {% for p in programs %}
+        <option value="{{ p.name }}" data-file="{{ p.file }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="dim small" style="margin-top:8px;">{{ programs|length }} programs in the graph.</div>
+    </div>
+
+    <div class="picker-detail">
+      <div id="prog-empty" class="diagram-loading" style="padding:120px 0;">
+        ← Select a program to see its diagrams.
+      </div>
+
+      <div id="prog-detail" style="display:none;">
+        <div class="prog-head">
+          <div>
+            <h2 id="ph-name" style="margin:0;">—</h2>
+            <div class="meta mono dim small" id="ph-file">—</div>
+          </div>
+          <div class="prog-kpis" id="ph-kpis"></div>
+        </div>
+
+        <div class="tabs" data-tabset="program" style="margin-top:14px;">
+          <div class="tab active" data-tab="p-ast">AST</div>
+          <div class="tab"        data-tab="p-cfg">Control Flow</div>
+          <div class="tab"        data-tab="p-call">Local Call Graph</div>
+          <div class="tab"        data-tab="p-fio">File I/O</div>
+          <div class="tab"        data-tab="p-data">Data Flow</div>
+        </div>
+
+        <div class="tab-content active" data-tab="p-ast">
+          <p class="subtitle">Parser AST trimmed to a reasonable rendering size. Click any node to inspect.</p>
+          <div class="cy-toolbar">
+            <button class="btn small" data-cy-action="fit" data-cy="cy-ast">Fit</button>
+            <select class="btn small" data-cy-layout="cy-ast">
+              <option value="dagre" selected>Layered (dagre)</option>
+              <option value="breadthfirst">Breadth-first</option>
+              <option value="cose">Cose</option>
+              <option value="circle">Circle</option>
+            </select>
+            <a id="ast-page-link" class="btn small" href="#">Open full AST →</a>
+          </div>
+          <div id="cy-ast" class="cy-canvas"></div>
+        </div>
+
+        <div class="tab-content" data-tab="p-cfg">
+          <p class="subtitle">Paragraphs as nodes, PERFORM edges between them.</p>
+          <div class="cy-toolbar">
+            <button class="btn small" data-cy-action="fit" data-cy="cy-cfg">Fit</button>
+            <select class="btn small" data-cy-layout="cy-cfg">
+              <option value="dagre" selected>Layered (dagre)</option>
+              <option value="breadthfirst">Breadth-first</option>
+              <option value="cose">Cose</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
+          <div id="cy-cfg" class="cy-canvas"></div>
+        </div>
+
+        <div class="tab-content" data-tab="p-call">
+          <p class="subtitle">This program plus its immediate callers and callees.</p>
+          <div class="cy-toolbar">
+            <button class="btn small" data-cy-action="fit" data-cy="cy-call">Fit</button>
+            <select class="btn small" data-cy-layout="cy-call">
+              <option value="dagre" selected>Layered (dagre)</option>
+              <option value="cose">Cose</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
+          <div id="cy-call" class="cy-canvas"></div>
+        </div>
+
+        <div class="tab-content" data-tab="p-fio">
+          <p class="subtitle">Program ↔ VSAM files with aggregated READ / WRITE / STARTBR ops.</p>
+          <div class="cy-toolbar">
+            <button class="btn small" data-cy-action="fit" data-cy="cy-fio">Fit</button>
+            <select class="btn small" data-cy-layout="cy-fio">
+              <option value="dagre" selected>Layered (dagre)</option>
+              <option value="cose">Cose</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
+          <div id="cy-fio" class="cy-canvas"></div>
+        </div>
+
+        <div class="tab-content" data-tab="p-data">
+          <p class="subtitle">Top data items with read / write edges from paragraphs.</p>
+          <div class="cy-toolbar">
+            <button class="btn small" data-cy-action="fit" data-cy="cy-data">Fit</button>
+            <select class="btn small" data-cy-layout="cy-data">
+              <option value="dagre" selected>Layered (dagre)</option>
+              <option value="cose">Cose</option>
+              <option value="breadthfirst">Breadth-first</option>
+            </select>
+          </div>
+          <div id="cy-data" class="cy-canvas"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+.mode-switch {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; margin: 12px 0 18px;
+}
+.mode-btn {
+  background: transparent; color: var(--text-dim);
+  border: 0; padding: 6px 14px; font-size: 13px; border-radius: 6px;
+  cursor: pointer; font-weight: 500;
+}
+.mode-btn.active { background: var(--accent); color: #fff; }
+
+.mermaid-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; overflow-x: auto; min-height: 320px;
+}
+.diagram-render { width: 100%; min-height: 280px; }
+.diagram-render svg { max-width: 100%; height: auto; }
+.diagram-loading { color: var(--text-dim); text-align: center; padding: 80px 0; font-style: italic; }
+.diagram-error { color: var(--danger); padding: 16px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
+
+.picker-row {
+  display: grid; grid-template-columns: 280px 1fr; gap: 18px; align-items: stretch;
+}
+.picker-col {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+  display: flex; flex-direction: column;
+}
+.picker-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+#prog-search {
+  background: var(--surface-2, #0a0e14); border: 1px solid var(--border);
+  color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 8px;
+}
+#prog-select {
+  background: var(--surface-2, #0a0e14); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; font-family: var(--mono); font-size: 13px; padding: 4px;
+  flex: 1; min-height: 360px;
+}
+#prog-select option { padding: 4px 8px; }
+#prog-select option:checked { background: var(--accent); color: #fff; }
+
+.picker-detail {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px;
+  min-height: 540px;
+}
+.prog-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.prog-kpis { display: flex; gap: 14px; flex-wrap: wrap; }
+.prog-kpis .kpi { background: var(--surface-2, #0a0e14); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; }
+.prog-kpis .kpi .v { font-family: var(--mono); font-size: 16px; color: var(--text); font-weight: 600; }
+.prog-kpis .kpi .l { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+
+.cy-toolbar { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+.cy-toolbar .btn.small { padding: 4px 10px; font-size: 12px; }
+.cy-canvas {
+  background:
+    linear-gradient(rgba(48,54,61,.25) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(48,54,61,.25) 1px, transparent 1px) 0 0 / 24px 24px,
+    #0a0e14;
+  border: 1px solid var(--border); border-radius: 8px;
+  height: 560px;
+}
+
+@media (max-width: 900px) {
+  .picker-row { grid-template-columns: 1fr; }
+  #prog-select { min-height: 220px; }
+}
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+<script>
+(function(){
+  // ===== Mode switch (Global / Per program) =====
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const modePanes = document.querySelectorAll('.mode-pane');
+  modeBtns.forEach(b => b.addEventListener('click', () => {
+    modeBtns.forEach(x => x.classList.toggle('active', x === b));
+    const m = b.dataset.mode;
+    modePanes.forEach(p => p.style.display = (p.dataset.modePane === m ? '' : 'none'));
+    if (m === 'global') renderGlobalTab(currentGlobalTab());
+  }));
+
+  // ===== GLOBAL: Mermaid render on tab activation =====
+  mermaid.initialize({
+    startOnLoad: false, theme: 'dark', securityLevel: 'loose',
+    maxTextSize: 200000, flowchart: { useMaxWidth: true, htmlLabels: true },
+    themeVariables: {
+      background:'#0d1117', primaryColor:'#161b22', primaryTextColor:'#c9d1d9',
+      primaryBorderColor:'#30363d', lineColor:'#8b949e',
+      secondaryColor:'#1c2129', tertiaryColor:'#21262d',
+    },
+  });
+
+  async function renderGlobalTab(tabId) {
+    if (!tabId) return;
+    const renderEl = document.getElementById('render-' + tabId);
+    if (!renderEl || renderEl.dataset.rendered === 'true') return;
+    const srcEl = document.getElementById('src-' + tabId);
+    if (!srcEl) return;
+    const src = srcEl.textContent.trim();
+    if (!src) {
+      renderEl.innerHTML = '<div class="diagram-error">No diagram source — run the pipeline first.</div>';
+      renderEl.dataset.rendered = 'true';
+      return;
+    }
+    try {
+      const id = 'mmd_' + tabId + '_' + Date.now();
+      const { svg } = await mermaid.render(id, src);
+      renderEl.innerHTML = svg;
+      renderEl.dataset.rendered = 'true';
+    } catch (e) {
+      renderEl.innerHTML = '<div class="diagram-error">Render failed:\n' + (e.message || String(e)) + '</div>';
+      renderEl.dataset.rendered = 'true';
+    }
+  }
+  function currentGlobalTab() {
+    const active = document.querySelector('.mode-pane[data-mode-pane="global"] .tab-content.active');
+    return active ? active.dataset.tab : null;
+  }
+  document.querySelectorAll('.tabs[data-tabset="global"] .tab').forEach(t => {
+    t.addEventListener('click', () => setTimeout(() => renderGlobalTab(t.dataset.tab), 30));
+  });
+  renderGlobalTab(currentGlobalTab());
+
+  // ===== PER-PROGRAM: file picker + Cytoscape panels =====
+  if (window.cytoscape && window.cytoscapeDagre) {
+    cytoscape.use(window.cytoscapeDagre);
+  }
+  const search = document.getElementById('prog-search');
+  const select = document.getElementById('prog-select');
+  const empty  = document.getElementById('prog-empty');
+  const detail = document.getElementById('prog-detail');
+  const phName = document.getElementById('ph-name');
+  const phFile = document.getElementById('ph-file');
+  const phKpis = document.getElementById('ph-kpis');
+  const astLink = document.getElementById('ast-page-link');
+
+  const cyInstances = { 'cy-ast': null, 'cy-cfg': null, 'cy-call': null, 'cy-fio': null, 'cy-data': null };
+  const cyDataCache = {};   // per-program cached payloads { name: { ast, cfg, call, fio, data } }
+  const tabLoaded = {};     // per-(program,tab) flags
+  let currentProgram = null;
+
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toUpperCase();
+    let firstVisible = null;
+    Array.from(select.options).forEach(o => {
+      const m = !q || o.value.toUpperCase().includes(q);
+      o.hidden = !m;
+      if (m && !firstVisible) firstVisible = o;
+    });
+    if (firstVisible) firstVisible.selected = true;
+  });
+
+  select.addEventListener('change', () => {
+    if (select.value) loadProgram(select.value);
+  });
+  select.addEventListener('click', () => {
+    if (select.value) loadProgram(select.value);
+  });
+
+  async function loadProgram(name) {
+    currentProgram = name;
+    empty.style.display = 'none';
+    detail.style.display = '';
+    phName.textContent = name;
+    const opt = select.querySelector('option[value="' + name + '"]');
+    phFile.textContent = opt ? opt.dataset.file : '';
+    astLink.href = '/programs/' + encodeURIComponent(name) + '/ast';
+    phKpis.innerHTML = '<div class="kpi"><div class="v">…</div><div class="l">loading</div></div>';
+
+    // reset tab-loaded flags so a re-pick repaints
+    Object.keys(cyInstances).forEach(k => { tabLoaded[name + ':' + k] = false; });
+
+    // Fetch the four lightweight summaries in parallel to populate KPIs.
+    cyDataCache[name] = cyDataCache[name] || {};
+    try {
+      const [cfg, call, fio, data] = await Promise.all([
+        fetch('/api/programs/' + encodeURIComponent(name) + '/cfg').then(r => r.json()),
+        fetch('/api/programs/' + encodeURIComponent(name) + '/local-calls').then(r => r.json()),
+        fetch('/api/programs/' + encodeURIComponent(name) + '/file-io-graph').then(r => r.json()),
+        fetch('/api/programs/' + encodeURIComponent(name) + '/def-use-graph?top_n=20').then(r => r.json()),
+      ]);
+      cyDataCache[name].cfg  = cfg;
+      cyDataCache[name].call = call;
+      cyDataCache[name].fio  = fio;
+      cyDataCache[name].data = data;
+      const paragraphs = (cfg.elements && cfg.elements.nodes || []).length;
+      const performs   = (cfg.elements && cfg.elements.edges || []).length;
+      const callers    = (call.callers || []).length;
+      const callees    = (call.callees || []).length;
+      const files      = fio.file_count || 0;
+      const dataItems  = data.data_item_count || 0;
+      phKpis.innerHTML =
+        `<div class="kpi"><div class="v">${paragraphs}</div><div class="l">paragraphs</div></div>` +
+        `<div class="kpi"><div class="v">${performs}</div><div class="l">PERFORM edges</div></div>` +
+        `<div class="kpi"><div class="v">${callers}</div><div class="l">callers</div></div>` +
+        `<div class="kpi"><div class="v">${callees}</div><div class="l">callees</div></div>` +
+        `<div class="kpi"><div class="v">${files}</div><div class="l">files</div></div>` +
+        `<div class="kpi"><div class="v">${dataItems}</div><div class="l">data items</div></div>`;
+    } catch (e) {
+      phKpis.innerHTML = '<div class="kpi"><div class="v">!</div><div class="l">load failed</div></div>';
+    }
+
+    // Render whichever tab is currently active
+    const activeTab = document.querySelector('.tabs[data-tabset="program"] .tab.active');
+    if (activeTab) renderProgramTab(activeTab.dataset.tab);
+  }
+
+  document.querySelectorAll('.tabs[data-tabset="program"] .tab').forEach(t => {
+    t.addEventListener('click', () => setTimeout(() => renderProgramTab(t.dataset.tab), 30));
+  });
+
+  function styleFor(kind) {
+    // Color palette per node kind for at-a-glance reading
+    const palette = {
+      paragraph: '#3b82f6',
+      file:      '#10b981',
+      data_item: '#f59e0b',
+      program:   '#a855f7',
+      program_self: '#ef4444',
+      ast:       '#64748b',
+    };
+    return palette[kind] || '#64748b';
+  }
+
+  async function renderProgramTab(tabId) {
+    if (!currentProgram) return;
+    const key = currentProgram + ':' + cyDivIdFor(tabId);
+    if (tabLoaded[key]) return;
+
+    if (tabId === 'p-ast') return renderAst();
+    if (tabId === 'p-cfg')  return renderCytoscape('cy-cfg', cyDataCache[currentProgram].cfg);
+    if (tabId === 'p-call') return renderCytoscape('cy-call', cyDataCache[currentProgram].call);
+    if (tabId === 'p-fio')  return renderCytoscape('cy-fio', cyDataCache[currentProgram].fio);
+    if (tabId === 'p-data') return renderCytoscape('cy-data', cyDataCache[currentProgram].data);
+  }
+  function cyDivIdFor(tabId) {
+    return { 'p-ast':'cy-ast','p-cfg':'cy-cfg','p-call':'cy-call','p-fio':'cy-fio','p-data':'cy-data' }[tabId];
+  }
+
+  async function renderAst() {
+    const containerId = 'cy-ast';
+    const el = document.getElementById(containerId);
+    el.innerHTML = '<div class="diagram-loading" style="padding:80px 0;">Loading AST…</div>';
+    try {
+      const r = await fetch('/api/programs/' + encodeURIComponent(currentProgram) + '/ast?max_nodes=400');
+      const data = await r.json();
+      // The AST endpoint may emit { nodes:[{id,label,kind,parent}], edges:[] } OR Cytoscape elements.
+      let elements;
+      if (data.elements) {
+        elements = data.elements;
+      } else if (Array.isArray(data.nodes)) {
+        elements = {
+          nodes: data.nodes.map(n => ({ data: { id: String(n.id), label: n.label || n.kind || n.id, kind: 'ast' } })),
+          edges: (data.edges || []).map(e => ({ data: { source: String(e.source || e.from), target: String(e.target || e.to) } })),
+        };
+        // also synthesize parent edges if present
+        data.nodes.forEach(n => {
+          if (n.parent != null) {
+            elements.edges.push({ data: { source: String(n.parent), target: String(n.id) } });
+          }
+        });
+      } else {
+        el.innerHTML = '<div class="diagram-error">AST payload not recognised.</div>';
+        return;
+      }
+      renderCytoscape(containerId, { elements });
+    } catch (e) {
+      el.innerHTML = '<div class="diagram-error">AST load failed: ' + (e.message || e) + '</div>';
+    }
+  }
+
+  function renderCytoscape(containerId, payload) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!payload || !payload.elements) {
+      el.innerHTML = '<div class="diagram-loading" style="padding:80px 0;">No data for this view.</div>';
+      return;
+    }
+    el.innerHTML = '';
+    const cy = cytoscape({
+      container: el,
+      elements: payload.elements,
+      style: [
+        { selector: 'node', style: {
+            'label': 'data(label)',
+            'background-color': ele => styleFor(ele.data('kind')),
+            'border-color': '#0a0e14', 'border-width': 1,
+            'color': '#e6edf3',
+            'font-size': 11, 'font-family': 'JetBrains Mono, Menlo, monospace',
+            'text-valign': 'center', 'text-halign': 'center',
+            'text-outline-color': '#0a0e14', 'text-outline-width': 2,
+            'width': 'label', 'height': 28, 'padding': '8px',
+            'shape': 'round-rectangle',
+        }},
+        { selector: 'node[kind = "program_self"]', style: { 'border-color': '#fef08a', 'border-width': 2 } },
+        { selector: 'edge', style: {
+            'line-color': '#475569', 'target-arrow-color': '#475569',
+            'target-arrow-shape': 'triangle', 'arrow-scale': .9,
+            'curve-style': 'bezier', 'width': 1.2,
+            'label': 'data(label)', 'font-size': 10, 'color': '#94a3b8',
+            'text-background-color': '#0a0e14', 'text-background-opacity': 1,
+            'text-background-padding': '2px',
+        }},
+        { selector: ':selected', style: { 'border-color': '#60a5fa', 'border-width': 2, 'line-color':'#60a5fa', 'target-arrow-color':'#60a5fa' }},
+      ],
+      layout: { name: 'dagre', rankDir: 'TB', nodeSep: 30, rankSep: 50, animate: false },
+      wheelSensitivity: 0.25,
+    });
+    cyInstances[containerId] = cy;
+    tabLoaded[currentProgram + ':' + containerId] = true;
+  }
+
+  // Toolbar (fit + layout switch) wiring is global — buttons carry data-cy
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-cy-action]');
+    if (!btn) return;
+    const cy = cyInstances[btn.dataset.cy];
+    if (!cy) return;
+    if (btn.dataset.cyAction === 'fit') cy.fit(null, 40);
+  });
+  document.addEventListener('change', e => {
+    const sel = e.target.closest('[data-cy-layout]');
+    if (!sel) return;
+    const cy = cyInstances[sel.dataset.cyLayout];
+    if (!cy) return;
+    cy.layout({ name: sel.value, rankDir: 'TB', nodeSep: 30, rankSep: 50, animate: false }).run();
+  });
+})();
+</script>
+{% endblock %}

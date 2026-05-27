@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% set active = 'documentation' %}
+{% block title %}Documentation · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Documentation</h1>
+    <div class="subtitle">
+      All project documentation files in one place — the championship brief, the architecture
+      doc, the submission README, and the open-source credits. Click any document to read it
+      in the browser; click the file path to view the raw markdown.
+    </div>
+  </div>
+</div>
+
+<div class="docs-layout">
+
+  {# ============================================================ #}
+  {#             LEFT: DOC LIST GROUPED BY SECTION                #}
+  {# ============================================================ #}
+  <aside class="docs-sidebar">
+    {% set sections = {} %}
+    {% for d in docs %}
+      {% if d.section not in sections %}{% set _ = sections.update({d.section: []}) %}{% endif %}
+      {% set _ = sections[d.section].append(d) %}
+    {% endfor %}
+    {% for section_name, items in sections.items() %}
+    <div class="docs-section">
+      <div class="docs-section-label">{{ section_name }}</div>
+      <ul class="docs-list">
+        {% for d in items %}
+        <li>
+          <a href="#" class="doc-link" data-path="{{ d.path }}" data-title="{{ d.title }}">
+            <span class="doc-title">{{ d.title }}</span>
+            <span class="doc-bytes">{{ (d.bytes / 1024)|round(1) }} KB</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </aside>
+
+  {# ============================================================ #}
+  {#                   RIGHT: RENDERED DOC                        #}
+  {# ============================================================ #}
+  <div class="docs-main">
+    <div id="doc-welcome" class="welcome-card">
+      <h2>Pick a document from the left</h2>
+      <p>This is the full set of human-readable documentation that ships with the
+      project. The brief is the championship's authoritative spec; the architecture
+      doc explains how the pipeline is built; the README is the submission cover
+      sheet; CREDITS lists every open-source dependency.</p>
+    </div>
+
+    <div id="doc-view" style="display:none;">
+      <div class="doc-header">
+        <div>
+          <div class="doc-eyebrow" id="dh-eyebrow">Documentation</div>
+          <h2 id="dh-title" class="doc-title-large"></h2>
+          <div class="doc-meta">
+            <code class="mono" id="dh-path"></code> ·
+            <span id="dh-bytes"></span>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <a id="dh-raw" href="#" target="_blank" class="btn" style="padding:6px 12px; font-size:12px;">View raw ↗</a>
+          <button id="dh-print" class="btn" style="padding:6px 12px; font-size:12px;">Print</button>
+        </div>
+      </div>
+
+      <div class="card doc-content-card">
+        <div id="doc-content" class="doc-rendered">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.docs-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.docs-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.docs-section { margin-bottom: 18px; }
+.docs-section:last-child { margin-bottom: 0; }
+.docs-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  font-weight: 700;
+  padding: 6px 10px 8px;
+}
+.docs-list { list-style: none; padding: 0; margin: 0; }
+.doc-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  border-left: 2px solid transparent;
+  margin-bottom: 2px;
+}
+.doc-link:hover { background: var(--surface-2); border-left-color: var(--accent); text-decoration: none; }
+.doc-link.active { background: rgba(88,166,255,0.12); border-left-color: var(--accent); color: var(--text-bright); }
+.doc-title { font-weight: 500; }
+.doc-bytes { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+.docs-main { min-width: 0; }
+.welcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 32px;
+}
+.welcome-card h2 { margin-top: 0; }
+.welcome-card p { color: var(--text-dim); line-height: 1.65; }
+
+.doc-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.doc-eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.doc-title-large { margin: 0 0 6px; font-size: 22px; color: var(--text-bright); }
+.doc-meta { font-size: 12px; color: var(--text-dim); }
+
+.doc-content-card { padding: 48px 56px; }
+.doc-rendered {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.75;
+  max-width: 820px;
+}
+.doc-rendered h1 { font-size: 32px; margin: 32px 0 18px; color: var(--text-bright); padding-bottom: 12px; border-bottom: 2px solid var(--accent); }
+.doc-rendered h1:first-child { margin-top: 0; }
+.doc-rendered h2 { font-size: 22px; margin: 28px 0 12px; color: var(--text-bright); }
+.doc-rendered h3 { font-size: 17px; margin: 22px 0 10px; color: var(--text-bright); font-weight: 600; }
+.doc-rendered h4 { font-size: 14px; margin: 18px 0 8px; color: var(--text-bright); font-weight: 600; }
+.doc-rendered p { margin: 0 0 14px; }
+.doc-rendered ul, .doc-rendered ol { padding-left: 24px; margin: 0 0 14px; }
+.doc-rendered li { margin: 4px 0; }
+.doc-rendered code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.doc-rendered pre {
+  background: #010409;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 14px 0;
+}
+.doc-rendered pre code { background: none; padding: 0; }
+.doc-rendered table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.doc-rendered th, .doc-rendered td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.doc-rendered th {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.doc-rendered tr:hover td { background: var(--surface-2); }
+.doc-rendered blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 16px;
+  color: var(--text-dim);
+  margin: 14px 0;
+  background: var(--bg);
+}
+.doc-rendered hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+.doc-rendered a { color: var(--accent); }
+.doc-rendered strong { color: var(--text-bright); }
+
+@media print {
+  .sidebar, .docs-sidebar, .doc-header { display: none !important; }
+  .main-content { margin-left: 0 !important; }
+  .docs-layout { display: block; }
+  .doc-content-card { padding: 0; border: none; background: white; }
+  .doc-rendered { color: black; max-width: none; }
+  .doc-rendered h1, .doc-rendered h2, .doc-rendered h3,
+  .doc-rendered strong { color: black; }
+  .doc-rendered pre { background: #f5f5f5; border: 1px solid #ccc; color: black; }
+  .doc-rendered code { background: #f0f0f0; color: black; }
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script>
+(function(){
+  const links = document.querySelectorAll('.doc-link');
+  const welcome = document.getElementById('doc-welcome');
+  const view = document.getElementById('doc-view');
+  const titleEl = document.getElementById('dh-title');
+  const pathEl = document.getElementById('dh-path');
+  const bytesEl = document.getElementById('dh-bytes');
+  const rawEl = document.getElementById('dh-raw');
+  const contentEl = document.getElementById('doc-content');
+
+  links.forEach(a => {
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      links.forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+      const path = a.dataset.path;
+      const title = a.dataset.title;
+      welcome.style.display = 'none';
+      view.style.display = '';
+      titleEl.textContent = title;
+      pathEl.textContent = path;
+      bytesEl.textContent = '';
+      rawEl.href = `/api/documentation/${path}`;
+      contentEl.innerHTML = '<div class="dim" style="padding:40px;">Loading…</div>';
+      try {
+        const r = await fetch(`/api/documentation/${path}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        contentEl.innerHTML = marked.parse(j.content);
+        bytesEl.textContent = (j.bytes / 1024).toFixed(1) + ' KB · ' + j.content.split('\n').length + ' lines';
+      } catch (e) {
+        contentEl.innerHTML = `<div style="color:var(--danger);padding:20px;">Failed to load: ${e}</div>`;
+      }
+    });
+  });
+
+  document.getElementById('dh-print').addEventListener('click', () => window.print());
+
+  // Auto-open the first document on page load
+  if (links.length > 0) links[0].click();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,743 @@
+{% extends "base.html" %}
+{% set active = 'spec_report' %}
+{% block title %}{{ report.front_matter.title }} · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="report-layout">
+  {# ============================================================ #}
+  {#                       LEFT: STICKY TOC                       #}
+  {# ============================================================ #}
+  <aside class="report-toc">
+    <div class="toc-header">Contents</div>
+    <ol class="toc-list">
+      <li><a href="#sec-front">1. Front matter</a></li>
+      <li><a href="#sec-exec">2. Executive summary</a></li>
+      <li><a href="#sec-corpus">3. Corpus inventory</a></li>
+      <li><a href="#sec-arch">4. System architecture</a></li>
+      <li><a href="#sec-dict">5. Data dictionary</a></li>
+      <li><a href="#sec-rules">6. Business rules catalog</a></li>
+      <li><a href="#sec-calls">7. Call graph &amp; dependencies</a></li>
+      <li><a href="#sec-tx">8. Transaction flow</a></li>
+      <li><a href="#sec-jcl">9. JCL job chains</a></li>
+      <li><a href="#sec-fio">10. File I/O map</a></li>
+      <li><a href="#sec-cpy">11. Copybook usage</a></li>
+      <li>
+        <a href="#sec-progs">12. Per-program specs</a>
+        <ol class="toc-sublist">
+          {% for p in report.per_program.programs %}
+          <li><a href="#prog-{{ p.name }}">{{ p.name }}</a></li>
+          {% endfor %}
+        </ol>
+      </li>
+      <li><a href="#sec-risks">13. Migration risk register</a></li>
+      <li><a href="#sec-mod">14. Modernization recommendations</a></li>
+    </ol>
+    <button class="btn btn-primary print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </aside>
+
+  {# ============================================================ #}
+  {#                       RIGHT: REPORT BODY                     #}
+  {# ============================================================ #}
+  <div class="report-body">
+
+    {# ---------- 1. Front matter ---------- #}
+    <section id="sec-front" class="report-section report-cover">
+      <div class="cover-eyebrow">CardDemo Modernization Pipeline</div>
+      <h1 class="cover-title">{{ report.front_matter.title }}</h1>
+      <div class="cover-subtitle">{{ report.front_matter.subtitle }}</div>
+      <dl class="cover-meta">
+        <dt>Version</dt><dd>{{ report.front_matter.version }}</dd>
+        <dt>Generated</dt><dd>{{ report.front_matter.generated_at }}</dd>
+        <dt>Corpus</dt><dd>{{ report.front_matter.corpus }}</dd>
+        <dt>Pipeline</dt><dd>{{ report.front_matter.pipeline }}</dd>
+      </dl>
+    </section>
+
+    {# ---------- 2. Executive summary ---------- #}
+    <section id="sec-exec" class="report-section">
+      <h1>2. Executive Summary</h1>
+      <p class="lead">{{ report.executive_summary.narrative }}</p>
+
+      <h2>System composition</h2>
+      <div class="report-kpi-grid">
+        <div class="report-kpi"><div class="kpi-num">{{ report.executive_summary.programs }}</div><div class="kpi-label">COBOL programs</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ "{:,}".format(report.executive_summary.paragraphs) }}</div><div class="kpi-label">Paragraphs</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ "{:,}".format(report.executive_summary.statements) }}</div><div class="kpi-label">Statements</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ "{:,}".format(report.executive_summary.data_items) }}</div><div class="kpi-label">Data items (incl. copybooks)</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ report.executive_summary.jobs }}</div><div class="kpi-label">JCL jobs</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ report.executive_summary.transactions }}</div><div class="kpi-label">CICS transactions</div></div>
+        <div class="report-kpi"><div class="kpi-num">{{ report.executive_summary.copybooks }}</div><div class="kpi-label">Distinct copybooks used</div></div>
+      </div>
+
+      <h2>Modernization approach</h2>
+      <p>{{ report.executive_summary.modernization_summary }}</p>
+    </section>
+
+    {# ---------- 3. Corpus inventory ---------- #}
+    <section id="sec-corpus" class="report-section">
+      <h1>3. Corpus Inventory</h1>
+      <p class="lead">Every file in <code>corpus/carddemo/app/</code> — the canonical CardDemo
+      source tree. <strong>{{ report.corpus_inventory.total_files }}</strong> files across
+      {{ report.corpus_inventory.breakdown|length }} subdirectories.</p>
+
+      {% for b in report.corpus_inventory.breakdown %}
+      <h3><code>app/{{ b.subdir }}/</code> <span class="dim">({{ b.count }} files)</span></h3>
+      <div class="file-grid">
+        {% for f in b.files %}<code class="file-chip">{{ f }}</code>{% endfor %}
+      </div>
+      {% endfor %}
+    </section>
+
+    {# ---------- 4. System architecture ---------- #}
+    <section id="sec-arch" class="report-section">
+      <h1>4. System Architecture</h1>
+      <h2>Three non-negotiable rules</h2>
+      {% for r in report.system_architecture.rules %}
+      <div class="rule-block">
+        <div class="rule-tag">Rule {{ "%02d"|format(r.id) }}</div>
+        <h3>{{ r.title }}</h3>
+        <p>{{ r.body }}</p>
+      </div>
+      {% endfor %}
+
+      <h2>Pipeline phases</h2>
+      <ol class="phase-list">
+        {% for ph in report.system_architecture.pipeline_phases %}
+        <li>{{ ph }}</li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    {# ---------- 5. Data dictionary ---------- #}
+    <section id="sec-dict" class="report-section">
+      <h1>5. Data Dictionary</h1>
+      <p class="lead">Data items declared in source (copybook expansions excluded). Each entry
+      is keyed by stable UUID and carries level, name, and entry type. PIC clause normalization
+      and full type information are visible via <code>/api/dataitem/&lt;uuid&gt;</code>.</p>
+      <p><strong>Total declared data items:</strong> {{ "{:,}".format(report.data_dictionary.total_items) }}
+      across {{ report.data_dictionary.by_program|length }} programs.</p>
+
+      {% for prog in report.data_dictionary.by_program %}
+      <h3 id="dict-{{ prog.program }}">{{ prog.program }} <span class="dim">({{ prog.data_items|length }} items)</span></h3>
+      <table class="report-table">
+        <thead><tr><th>Level</th><th>Name</th><th>Entry type</th><th>Line</th><th>UUID</th></tr></thead>
+        <tbody>
+          {% for di in prog.data_items[:50] %}
+          <tr>
+            <td class="mono right">{{ di.level }}</td>
+            <td class="mono">{{ di.name }}</td>
+            <td class="dim">{{ di.entry_type or '—' }}</td>
+            <td class="mono right dim">{{ di.line }}</td>
+            <td class="mono dim">{{ di.uuid[:8] }}…</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if prog.data_items|length > 50 %}
+      <p class="dim small">… {{ prog.data_items|length - 50 }} more items truncated for readability. Full list via REST API.</p>
+      {% endif %}
+      {% endfor %}
+    </section>
+
+    {# ---------- 6. Business rules catalog ---------- #}
+    <section id="sec-rules" class="report-section">
+      <h1>6. Business Rules Catalog</h1>
+      <p class="lead">Every <code>IF</code> and <code>EVALUATE</code> statement extracted from the corpus,
+      keyed by stable UUID. <strong>{{ "{:,}".format(report.business_rules.total_rules) }} rules</strong>
+      across {{ report.business_rules.by_program|length }} programs.</p>
+
+      {% for prog in report.business_rules.by_program %}
+      <h3 id="rules-{{ prog.program }}">{{ prog.program }} <span class="dim">({{ prog.rules|length }} rules)</span></h3>
+      <table class="report-table">
+        <thead><tr><th>Type</th><th>Line</th><th>Predicate / text</th><th>UUID</th></tr></thead>
+        <tbody>
+          {% for r in prog.rules[:30] %}
+          <tr>
+            <td><span class="pill {% if r.type == 'IF' %}accent{% else %}warn{% endif %}">{{ r.type }}</span></td>
+            <td class="mono right dim">{{ r.line }}</td>
+            <td class="mono small">{{ r.text }}</td>
+            <td class="mono dim">{{ r.uuid[:8] }}…</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if prog.rules|length > 30 %}
+      <p class="dim small">… {{ prog.rules|length - 30 }} more truncated.</p>
+      {% endif %}
+      {% endfor %}
+    </section>
+
+    {# ---------- 7. Call graph ---------- #}
+    <section id="sec-calls" class="report-section">
+      <h1>7. Call Graph &amp; Inter-program Dependencies</h1>
+      <p class="lead"><strong>{{ report.call_graph.total_edges }}</strong> call edges across the corpus —
+      static <code>CALL</code> targets, plus CICS <code>LINK</code> / <code>XCTL</code> edges.</p>
+
+      <h2>Edge kinds</h2>
+      <ul>
+        {% for kind, n in report.call_graph.edge_kinds.items() %}
+        <li><strong>{{ kind }}:</strong> {{ n }}</li>
+        {% endfor %}
+      </ul>
+
+      <h2>Top callers (out-degree)</h2>
+      <table class="report-table">
+        <thead><tr><th>Program</th><th class="right">Calls out</th></tr></thead>
+        <tbody>
+          {% for prog, n in report.call_graph.top_callers %}
+          <tr><td class="mono">{{ prog }}</td><td class="right mono">{{ n }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2>Top callees (in-degree)</h2>
+      <table class="report-table">
+        <thead><tr><th>Program</th><th class="right">Calls in</th></tr></thead>
+        <tbody>
+          {% for prog, n in report.call_graph.top_callees %}
+          <tr><td class="mono">{{ prog }}</td><td class="right mono">{{ n }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2>Full edge list</h2>
+      <table class="report-table">
+        <thead><tr><th>Caller</th><th>Edge</th><th>Callee</th><th class="right">Line</th></tr></thead>
+        <tbody>
+          {% for e in report.call_graph.edges %}
+          <tr>
+            <td class="mono">{{ e.caller_program }}</td>
+            <td><span class="pill">{{ e.edge_kind }}</span></td>
+            <td class="mono">{{ e.callee_program }}</td>
+            <td class="right mono dim">{{ e.line }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {# ---------- 8. Transaction flow ---------- #}
+    <section id="sec-tx" class="report-section">
+      <h1>8. Transaction Flow (CICS)</h1>
+      <p class="lead"><strong>{{ report.transaction_flow.transactions|length }} transactions</strong>
+      and <strong>{{ report.transaction_flow.total_edges }} flow edges</strong> derived from
+      <code>EXEC CICS XCTL/LINK/RETURN</code> + the CSD transaction-to-program registrations.</p>
+
+      <h2>Transactions</h2>
+      <div class="chip-row">
+        {% for tx in report.transaction_flow.transactions %}
+        <code class="file-chip">{{ tx }}</code>
+        {% endfor %}
+      </div>
+
+      <h2>Flow edges</h2>
+      <table class="report-table">
+        <thead><tr><th>Transaction</th><th>Edge kind</th><th>From</th><th>To</th><th class="right">Line</th></tr></thead>
+        <tbody>
+          {% for e in report.transaction_flow.edges %}
+          <tr>
+            <td class="mono">{{ e.transaction_id or '—' }}</td>
+            <td><span class="pill">{{ e.edge_kind }}</span></td>
+            <td class="mono">{{ e.from_program or '—' }}</td>
+            <td class="mono">{{ e.to_program or '—' }}</td>
+            <td class="right mono dim">{{ e.line or '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {# ---------- 9. JCL job chains ---------- #}
+    <section id="sec-jcl" class="report-section">
+      <h1>9. JCL Job Chains</h1>
+      <p class="lead"><strong>{{ report.jcl_chains.total_jobs }} batch jobs</strong>, each with their
+      step list, programs invoked, and DD statements.</p>
+
+      {% for job in report.jcl_chains.jobs %}
+      <h3>{{ job.job }}</h3>
+      <table class="report-table">
+        <thead><tr><th>Step</th><th>Program</th><th>DD</th><th>DSN</th><th>DISP</th></tr></thead>
+        <tbody>
+          {% for s in job.steps %}
+            {% if s.dds %}
+              {% for dd in s.dds %}
+              <tr>
+                <td class="mono">{% if loop.first %}{{ s.step }}{% endif %}</td>
+                <td class="mono">{% if loop.first %}{{ s.program or '—' }}{% endif %}</td>
+                <td class="mono">{{ dd.dd_name or '—' }}</td>
+                <td class="mono small">{{ dd.dsn or '—' }}</td>
+                <td class="mono">{{ dd.disp or '—' }}</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+            <tr>
+              <td class="mono">{{ s.step }}</td>
+              <td class="mono">{{ s.program or '—' }}</td>
+              <td colspan="3" class="dim">(no DDs)</td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endfor %}
+    </section>
+
+    {# ---------- 10. File I/O map ---------- #}
+    <section id="sec-fio" class="report-section">
+      <h1>10. File I/O Map</h1>
+      <p class="lead"><strong>{{ report.file_io_map.total_ops }} file operations</strong>
+      across <strong>{{ report.file_io_map.distinct_files }} VSAM files</strong>.</p>
+
+      {% for f in report.file_io_map.by_file %}
+      <h3><code>{{ f.file }}</code> <span class="dim">({{ f.operations|length }} ops)</span></h3>
+      <table class="report-table">
+        <thead><tr><th>Op</th><th>Program</th><th>Record copybook</th><th class="right">Line</th></tr></thead>
+        <tbody>
+          {% for op in f.operations %}
+          <tr>
+            <td><span class="pill {% if op.operation in ['READ','READNEXT','READPREV','STARTBR','ENDBR'] %}accent{% else %}warn{% endif %}">{{ op.operation }}</span></td>
+            <td class="mono">{{ op.program }}</td>
+            <td class="mono dim">{{ op.record_copybook or '—' }}</td>
+            <td class="right mono dim">{{ op.line }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endfor %}
+    </section>
+
+    {# ---------- 11. Copybook usage ---------- #}
+    <section id="sec-cpy" class="report-section">
+      <h1>11. Copybook Usage</h1>
+      <p class="lead"><strong>{{ report.copybook_usage.total_copybooks }} distinct copybooks</strong>
+      with their consumers (every program that COPY-includes each).</p>
+      <table class="report-table">
+        <thead><tr><th>Copybook</th><th>Used by</th></tr></thead>
+        <tbody>
+          {% for cb in report.copybook_usage.by_copybook %}
+          <tr>
+            <td class="mono">{{ cb.copybook }}</td>
+            <td class="small">
+              {% for c in cb.consumers %}<code class="file-chip">{{ c.program }}</code>{% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {# ---------- 12. Per-program specs (THE BULK) ---------- #}
+    <section id="sec-progs" class="report-section">
+      <h1>12. Per-Program Specifications</h1>
+      <p class="lead">Detailed specification for every COBOL program in the canonical CardDemo.
+      <strong>{{ report.per_program.programs_with_llm_spec }}</strong> of
+      <strong>{{ report.per_program.total_programs }}</strong> programs have full LLM-authored specs
+      (run the exhaustive specs generator to fill in the remainder; this report uses graph data
+      directly for programs without specs).</p>
+
+      {% for p in report.per_program.programs %}
+      <div class="program-spec" id="prog-{{ p.name }}">
+        <h2>{{ p.name }}</h2>
+        <div class="prog-meta">
+          <code>{{ p.file }}</code> ·
+          <span class="uuid">{{ p.uuid }}</span> ·
+          {{ p.paragraph_count }} paragraphs ·
+          {{ p.total_statements }} statements ·
+          {{ p.rule_count }} business rules ·
+          {{ p.copybooks|length }} copybooks ·
+          {{ p.file_io|length }} file ops ·
+          {{ p.calls_out|length }} call edges
+        </div>
+
+        {% if p.has_llm_spec %}
+        <h3>Overview (LLM-authored, grounded {{ p.grounding.pct or 0 }}%)</h3>
+        <p>{{ p.llm_spec.overview }}</p>
+
+        {% if p.llm_spec.responsibilities %}
+        <h3>Responsibilities</h3>
+        <ul>{% for r in p.llm_spec.responsibilities %}<li>{{ r }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        {% if p.llm_spec.external_dependencies %}
+        <h3>External dependencies</h3>
+        <ul>
+          {% for k, vs in p.llm_spec.external_dependencies.items() %}
+            {% if vs %}<li><strong>{{ k.replace('_', ' ') }}:</strong> {{ vs|join(', ') }}</li>{% endif %}
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% else %}
+        <p class="dim small">(LLM spec not yet generated for this program — section uses graph data only.
+        Run <code>python -m llm.exhaustive_specs --only {{ p.name }}</code> to enrich.)</p>
+        {% endif %}
+
+        <h3>Paragraphs</h3>
+        <table class="report-table">
+          <thead><tr><th>Name</th><th class="right">Start</th><th class="right">End</th>
+          {% if p.has_llm_spec %}<th>Purpose</th>{% endif %}</tr></thead>
+          <tbody>
+            {% set para_specs = {} %}
+            {% if p.has_llm_spec %}
+              {% for ps in p.llm_spec.paragraphs %}{% set _ = para_specs.update({ps.name: ps}) %}{% endfor %}
+            {% endif %}
+            {% for para in p.paragraphs %}
+            <tr>
+              <td class="mono"><a href="/paragraphs/{{ para.uuid }}">{{ para.name }}</a></td>
+              <td class="right mono dim">{{ para.start_line }}</td>
+              <td class="right mono dim">{{ para.end_line }}</td>
+              {% if p.has_llm_spec %}
+              <td class="small">{{ para_specs.get(para.name, {}).get('purpose', '') }}</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% if p.copybooks %}
+        <h3>Copybooks included</h3>
+        <div class="chip-row">
+          {% for cb in p.copybooks %}<code class="file-chip">{{ cb }}</code>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if p.file_io %}
+        <h3>File I/O</h3>
+        <table class="report-table">
+          <thead><tr><th>Op</th><th>File</th><th>Record</th><th class="right">Line</th></tr></thead>
+          <tbody>
+            {% for op in p.file_io %}
+            <tr>
+              <td><span class="pill {% if op.operation in ['READ','READNEXT','READPREV','STARTBR','ENDBR'] %}accent{% else %}warn{% endif %}">{{ op.operation }}</span></td>
+              <td class="mono">{{ op.file_name }}</td>
+              <td class="mono dim">{{ op.record_copybook or '—' }}</td>
+              <td class="right mono dim">{{ op.line }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+
+        {% if p.calls_out %}
+        <h3>Outgoing calls</h3>
+        <table class="report-table">
+          <thead><tr><th>Edge</th><th>Callee</th><th class="right">Line</th></tr></thead>
+          <tbody>
+            {% for c in p.calls_out %}
+            <tr>
+              <td><span class="pill {% if c.edge_kind == 'CALL_STATIC' %}accent{% else %}purple{% endif %}">{{ c.edge_kind }}</span></td>
+              <td class="mono">{{ c.callee_program }}</td>
+              <td class="right mono dim">{{ c.line }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+
+        {% if p.statement_kinds %}
+        <h3>Statement composition</h3>
+        <table class="report-table">
+          <thead><tr><th>Type</th><th class="right">Count</th></tr></thead>
+          <tbody>
+            {% for kind, n in p.statement_kinds.items() %}
+            <tr><td class="mono">{{ kind }}</td><td class="right mono">{{ n }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+
+        {% if p.has_llm_spec and p.llm_spec.migration_risks %}
+        <h3>Migration risks (LLM-identified)</h3>
+        <ul>{% for r in p.llm_spec.migration_risks %}<li>{{ r }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </section>
+
+    {# ---------- 13. Migration risk register ---------- #}
+    <section id="sec-risks" class="report-section">
+      <h1>13. Migration Risk Register</h1>
+      <p class="lead">Derived mechanically from the artifact graph. Each row points at a specific
+      location in source. <strong>{{ report.migration_risks.total_risks }} risk instances</strong> found.</p>
+
+      <h2>Summary by category</h2>
+      <table class="report-table">
+        <thead><tr><th>Category</th><th class="right">Instances</th></tr></thead>
+        <tbody>
+          {% for cat, n in report.migration_risks.by_category.items() %}
+          <tr><td>{{ cat }}</td><td class="right mono">{{ n }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2>Detailed risk instances</h2>
+      <table class="report-table">
+        <thead><tr><th>Category</th><th>Severity</th><th>Where</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          {% for r in report.migration_risks.risks %}
+          <tr>
+            <td>{{ r.category }}</td>
+            <td><span class="pill {% if r.severity == 'high' %}warn{% else %}accent{% endif %}">{{ r.severity }}</span></td>
+            <td class="mono small">{{ r.where }}</td>
+            <td class="small">{{ r.why }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {# ---------- 14. Modernization recommendations ---------- #}
+    <section id="sec-mod" class="report-section">
+      <h1>14. Modernization Recommendations</h1>
+
+      <h2>Target stack</h2>
+      <table class="report-table">
+        <tbody>
+          {% for k, v in report.modernization.target_stack.items() %}
+          <tr><th class="left">{{ k.replace('_', ' ').title() }}</th><td>{{ v }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h2>Migration phasing</h2>
+      {% for ph in report.modernization.phasing %}
+      <div class="phase-card">
+        <h3>Phase {{ ph.phase }} — {{ ph.name }}</h3>
+        <ul>{% for it in ph['items'] %}<li>{{ it }}</li>{% endfor %}</ul>
+      </div>
+      {% endfor %}
+
+      <h2>Key decisions</h2>
+      <ul>{% for d in report.modernization.key_decisions %}<li>{{ d }}</li>{% endfor %}</ul>
+    </section>
+
+    <footer class="report-footer">
+      <p>End of report. Generated {{ report.front_matter.generated_at }} ·
+      <a href="/specs">Back to Specs Generator</a> · <a href="/">Dashboard</a></p>
+    </footer>
+  </div>
+</div>
+
+<style>
+/* ============================================================
+                       REPORT LAYOUT + TYPOGRAPHY
+   ============================================================ */
+.report-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 32px;
+  align-items: start;
+}
+.report-toc {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 12px;
+  font-size: 12px;
+}
+.toc-header {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  font-weight: 700;
+  padding: 4px 8px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list, .toc-sublist { list-style: none; padding-left: 0; margin: 0; }
+.toc-list > li { margin: 4px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text-bright); text-decoration: none; }
+.toc-sublist {
+  padding-left: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.toc-sublist a { padding: 3px 8px; color: var(--text-dim); }
+.toc-sublist a:hover { color: var(--accent); }
+.print-btn { margin-top: 16px; width: 100%; }
+
+.report-body {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 56px 64px;
+  min-width: 0;
+}
+.report-section {
+  padding: 48px 0;
+  border-bottom: 1px solid var(--border);
+}
+.report-section:first-child { padding-top: 16px; }
+.report-section:last-child { border-bottom: none; }
+.report-section h1 {
+  font-size: 32px;
+  color: var(--text-bright);
+  margin: 0 0 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--accent);
+}
+.report-section h2 {
+  font-size: 20px;
+  color: var(--text-bright);
+  margin: 32px 0 12px;
+}
+.report-section h3 {
+  font-size: 15px;
+  color: var(--text-bright);
+  margin: 24px 0 10px;
+  font-weight: 600;
+}
+.report-section .lead {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  margin: 0 0 24px;
+}
+.report-section p { line-height: 1.7; margin: 0 0 14px; }
+.report-section ul, .report-section ol { line-height: 1.7; padding-left: 22px; }
+
+/* Cover page */
+.report-cover { text-align: left; padding: 64px 0 96px; }
+.cover-eyebrow {
+  display: inline-block;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  margin-bottom: 24px;
+}
+.cover-title {
+  font-size: 48px;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  background: linear-gradient(135deg, var(--text-bright) 0%, var(--accent) 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.cover-subtitle { font-size: 20px; color: var(--text-dim); margin: 0 0 40px; }
+.cover-meta { display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; max-width: 600px; font-size: 13px; }
+.cover-meta dt { color: var(--text-dim); }
+.cover-meta dd { margin: 0; color: var(--text-bright); }
+
+/* KPI grid */
+.report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+.report-kpi {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.kpi-num { font-size: 28px; font-weight: 700; color: var(--text-bright); line-height: 1; }
+.kpi-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+
+/* Tables */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 12px 0 20px;
+  background: var(--bg);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.report-table th, .report-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.report-table th { background: var(--surface-2); color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.report-table tr:last-child td { border-bottom: none; }
+.report-table .right { text-align: right; }
+.report-table .left { text-align: left; }
+.report-table .small { font-size: 11px; }
+.report-table .dim { color: var(--text-dim); }
+.report-table .mono { font-family: var(--mono); }
+
+/* Rules + phases */
+.rule-block { background: var(--bg); border-left: 3px solid var(--accent); padding: 14px 18px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+.rule-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; }
+.phase-list li { margin: 6px 0; }
+.phase-card { background: var(--bg); border: 1px solid var(--border); padding: 14px 18px; border-radius: 6px; margin: 12px 0; }
+
+/* File chips + chip rows */
+.file-grid, .chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.file-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+/* Per-program */
+.program-spec {
+  margin: 32px 0;
+  padding: 24px 28px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.program-spec h2 {
+  font-size: 24px;
+  margin: 0 0 4px;
+  color: var(--text-bright);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.prog-meta { font-size: 12px; color: var(--text-dim); margin: 0 0 16px; line-height: 1.6; }
+.prog-meta code { color: var(--text); }
+.prog-meta .uuid { color: var(--accent); font-family: var(--mono); }
+
+.report-footer { padding: 32px 0 16px; color: var(--text-dim); text-align: center; font-size: 13px; }
+
+/* ============================================================
+                              PRINT
+   ============================================================ */
+@media print {
+  .sidebar, .report-toc { display: none !important; }
+  .main-content { margin-left: 0 !important; }
+  .report-body { padding: 0; border: none; }
+  .report-layout { display: block; }
+  .report-section { page-break-after: always; padding: 24px 0; }
+  .report-section h1 { page-break-before: always; }
+  .program-spec { page-break-inside: avoid; }
+  body { background: white !important; color: black !important; }
+  .report-section h1, .report-section h2, .report-section h3,
+  .kpi-num, .cover-title { color: black !important; -webkit-text-fill-color: black !important; background: none !important; }
+  .report-table th { background: #eee !important; color: black !important; }
+  .report-table { background: white !important; }
+  .file-chip, .pill { border: 1px solid #ccc !important; background: white !important; color: black !important; }
+}
+</style>
+
+{% endblock %}

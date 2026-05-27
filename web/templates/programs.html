@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set active = 'programs' %}
+{% block title %}Programs · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Programs</h1>
+    <div class="meta">{{ programs|length }} COBOL programs parsed at 100% coverage</div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Program</th>
+        <th class="right">Paragraphs</th>
+        <th class="right">Statements</th>
+        <th class="right">Data Items</th>
+        <th class="right">File ops</th>
+        <th class="right">Calls out</th>
+        <th class="right">Copybooks</th>
+        <th>UUID</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in programs %}
+      <tr>
+        <td><a href="/programs/{{ p.name }}">{{ p.name }}</a></td>
+        <td class="right mono">{{ p.paragraphs }}</td>
+        <td class="right mono">{{ p.statements }}</td>
+        <td class="right mono">{{ p.data_items }}</td>
+        <td class="right mono">{{ p.file_io }}</td>
+        <td class="right mono">{{ p.calls }}</td>
+        <td class="right mono">{{ p.copybooks }}</td>
+        <td><span class="uuid" onclick="lookupUuid('{{ p.uuid }}')">{{ p.uuid[:8] }}…</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

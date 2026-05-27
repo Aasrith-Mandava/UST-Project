@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set active = 'jobs' %}
+{% block title %}{{ job.name }} · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/jobs">Jobs</a>
+  <span class="sep">/</span>
+  <span>{{ job.name }}</span>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ job.name }}</h1>
+    <div class="meta">{{ job.steps|length }} step(s) · {{ job.dds|length }} DD statement(s)</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Steps</div>
+    <table style="margin-top: 8px;">
+      <thead><tr><th>Step</th><th>Program</th></tr></thead>
+      <tbody>
+        {% for s in job.steps %}
+        <tr><td class="mono">{{ s.step_name }}</td><td><a href="/programs/{{ s.step_program }}">{{ s.step_program }}</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">Upstream / downstream</div>
+    <div style="margin-top: 8px;">
+      {% if job.upstream %}
+        <div style="margin-bottom: 8px;"><strong>Upstream (writes inputs this job reads):</strong></div>
+        {% for u in job.upstream %}
+        <div class="mono" style="margin-left: 12px;">
+          <span class="pill accent">{{ u.upstream_job }}</span> → <span class="dim">{{ u.dataset }}</span>
+        </div>
+        {% endfor %}
+      {% endif %}
+      {% if job.downstream %}
+        <div style="margin: 12px 0 8px;"><strong>Downstream (reads outputs this job writes):</strong></div>
+        {% for d in job.downstream %}
+        <div class="mono" style="margin-left: 12px;">
+          <span class="dim">{{ d.dataset }}</span> → <span class="pill accent">{{ d.downstream_job }}</span>
+        </div>
+        {% endfor %}
+      {% endif %}
+      {% if not job.upstream and not job.downstream %}<div class="dim">No cross-job dependencies for this job.</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+<h2>DD statements</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Step</th><th>DD name</th><th>Dataset (DSN)</th><th>DISP</th></tr></thead>
+    <tbody>
+      {% for d in job.dds %}
+      <tr>
+        <td class="mono">{{ d.step_name }}</td>
+        <td class="mono">{{ d.dd_name }}</td>
+        <td class="mono">{{ d.dsn }}</td>
+        <td class="mono dim">{{ d.disp or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

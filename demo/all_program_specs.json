@@ -1,0 +1,42 @@
+{
+  "generated_at": 1779684604,
+  "total_programs": 3,
+  "ok": 3,
+  "skipped": 0,
+  "failed": 0,
+  "programs": [
+    {
+      "name": "CBACT01C",
+      "status": "ok",
+      "mode": "live:gemini/gemini-2.5-flash-lite",
+      "grounding_pct": 100.0,
+      "references": 17,
+      "paragraphs": 16,
+      "spec_path": "demo/program_spec_CBACT01C.json",
+      "error": null,
+      "duration_s": 8.72
+    },
+    {
+      "name": "CBACT02C",
+      "status": "ok",
+      "mode": "live:gemini/gemini-2.5-flash-lite",
+      "grounding_pct": 100.0,
+      "references": 6,
+      "paragraphs": 5,
+      "spec_path": "demo/program_spec_CBACT02C.json",
+      "error": null,
+      "duration_s": 15.86
+    },
+    {
+      "name": "CBACT03C",
+      "status": "ok",
+      "mode": "live:gemini/gemini-2.5-flash-lite",
+      "grounding_pct": 100.0,
+      "references": 6,
+      "paragraphs": 5,
+      "spec_path": "demo/program_spec_CBACT03C.json",
+      "error": null,
+      "duration_s": 39.42
+    }
+  ]
+}

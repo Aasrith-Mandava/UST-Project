@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% set active = 'repo' %}
+{% block title %}Java Repo · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Java Repository</h1>
+    <div class="subtitle">
+      Multi-program forward engineering. Every COBOL program in the corpus is transformed
+      into a Java class, plus a Spring Batch config for the recognized chain. Layout follows
+      Maven conventions.
+    </div>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center;">
+    <span id="repo-status" class="pill">checking…</span>
+    <button id="rebuild-btn" class="btn btn-primary">Rebuild repo</button>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat-num" id="stat-programs">{{ info.program_count or 0 }}</div><div class="stat-label">Programs emitted</div></div>
+  <div class="stat"><div class="stat-num" id="stat-files">{{ (info.files or [])|length }}</div><div class="stat-label">Java files</div></div>
+  <div class="stat"><div class="stat-num" id="stat-lines">{{ "{:,}".format(info.total_lines or 0) }}</div><div class="stat-label">Total source lines</div></div>
+  <div class="stat"><div class="stat-num">{{ 'Yes' if info.has_pom else 'No' }}</div><div class="stat-label">pom.xml present</div></div>
+</div>
+
+<div class="pipeline-grid" style="margin-top: 24px;">
+  <div class="card pipeline-card">
+    <div class="card-head">
+      <span class="card-title">Repository tree</span>
+      <span id="tree-meta" class="pill">{{ (info.files or [])|length }} files</span>
+    </div>
+    <div id="tree" class="repo-tree" style="margin-top: 8px;">
+      {% for f in info.files %}
+      <a class="repo-file" data-path="{{ f.path }}">
+        <span class="repo-file-name">{{ f.name }}</span>
+        <span class="repo-file-meta">{{ f.lines }} lines</span>
+      </a>
+      {% endfor %}
+      {% if not info.files %}
+      <div class="empty" style="padding: 24px;">No files yet — click "Rebuild repo" or wait for the auto-build below.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card pipeline-card">
+    <div class="card-head">
+      <span class="card-title" id="viewer-title">Select a file</span>
+      <span id="viewer-meta" class="pill" style="display:none;"></span>
+    </div>
+    <pre id="viewer" class="console" style="min-height: 540px;">Click a file on the left to view its source.</pre>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+  <div class="card-head"><span class="card-title">Build log</span></div>
+  <pre id="build-log" class="console" style="min-height: 200px; max-height: 360px;">Build hasn't run this session yet.</pre>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const STALE = {{ info.stale | tojson }};
+  const HAS_FILES = {{ (info.files and (info.files | length) > 0) | tojson }};
+  const rebuildBtn = document.getElementById('rebuild-btn');
+  const statusEl = document.getElementById('repo-status');
+  const log = document.getElementById('build-log');
+  const tree = document.getElementById('tree');
+  const treeMeta = document.getElementById('tree-meta');
+  const statPrograms = document.getElementById('stat-programs');
+  const statFiles = document.getElementById('stat-files');
+  const statLines = document.getElementById('stat-lines');
+  const viewer = document.getElementById('viewer');
+  const viewerTitle = document.getElementById('viewer-title');
+  const viewerMeta = document.getElementById('viewer-meta');
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = 'pill ' + cls;
+  }
+  function appendLog(line) {
+    if (log.textContent.includes("hasn't run")) log.textContent = '';
+    log.textContent += line + '\n';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function attachTreeHandlers() {
+    tree.querySelectorAll('.repo-file').forEach(el => {
+      el.addEventListener('click', async () => {
+        tree.querySelectorAll('.repo-file').forEach(x => x.classList.remove('active'));
+        el.classList.add('active');
+        const path = el.dataset.path;
+        viewerTitle.textContent = path;
+        viewer.textContent = 'Loading…';
+        viewerMeta.style.display = 'none';
+        try {
+          const r = await fetch('/api/repo/file?path=' + encodeURIComponent(path));
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const j = await r.json();
+          viewer.textContent = j.content;
+          const lines = j.content.split('\n').length;
+          viewerMeta.textContent = lines + ' lines · ' + j.content.length + ' bytes';
+          viewerMeta.style.display = '';
+        } catch (e) {
+          viewer.textContent = 'Failed to load: ' + e;
+        }
+      });
+    });
+  }
+  attachTreeHandlers();
+
+  async function refreshInventory() {
+    const r = await fetch('/api/repo/inventory');
+    const inv = await r.json();
+    statPrograms.textContent = inv.program_count || 0;
+    statFiles.textContent = (inv.files || []).length;
+    statLines.textContent = (inv.total_lines || 0).toLocaleString();
+    treeMeta.textContent = (inv.files || []).length + ' files';
+    tree.innerHTML = '';
+    if (!inv.files || !inv.files.length) {
+      tree.innerHTML = '<div class="empty" style="padding:24px;">No files yet.</div>';
+      return;
+    }
+    for (const f of inv.files) {
+      const a = document.createElement('a');
+      a.className = 'repo-file';
+      a.dataset.path = f.path;
+      a.innerHTML = `<span class="repo-file-name">${f.name}</span><span class="repo-file-meta">${f.lines} lines</span>`;
+      tree.appendChild(a);
+    }
+    attachTreeHandlers();
+  }
+
+  function build() {
+    rebuildBtn.disabled = true;
+    setStatus('building…', 'warn');
+    log.textContent = '';
+    const es = new EventSource('/api/repo/build');
+    let okCount = 0;
+
+    es.addEventListener('start', e => {
+      const d = JSON.parse(e.data);
+      appendLog(`starting build for ${d.total} programs`);
+    });
+    es.addEventListener('program', e => {
+      const d = JSON.parse(e.data);
+      const mark = d.status === 'ok' ? '✓' : (d.status === 'skipped' ? '∼' : '✗');
+      const extra = d.status === 'ok' ? `(${d.java_lines} lines)` : (d.error ? '— ' + (d.error||'').slice(0,80) : '');
+      appendLog(`  ${mark} [${d.idx}/${d.total}] ${d.name.padEnd(12)} ${extra}`);
+      if (d.status === 'ok') {
+        okCount++;
+        statPrograms.textContent = okCount;
+      }
+    });
+    es.addEventListener('batch', e => {
+      const d = JSON.parse(e.data);
+      appendLog(`  batch: ${d.status} ${d.path || d.reason || d.error || ''}`);
+    });
+    es.addEventListener('scaffold', () => {
+      appendLog('  scaffold: pom.xml + README.md written');
+    });
+    es.addEventListener('complete', async e => {
+      const d = JSON.parse(e.data);
+      es.close();
+      rebuildBtn.disabled = false;
+      setStatus(d.error_count > 0 ? `done (${d.error_count} errors)` : 'fresh', d.error_count > 0 ? 'warn' : 'success');
+      appendLog(`\nbuild complete: ok=${d.ok_count} skipped=${d.skipped_count} errors=${d.error_count}`);
+      await refreshInventory();
+    });
+    es.onerror = () => {
+      es.close();
+      rebuildBtn.disabled = false;
+      setStatus('error', 'warn');
+      appendLog('[connection lost]');
+    };
+  }
+
+  rebuildBtn.addEventListener('click', build);
+
+  // Auto-rebuild on first visit if repo is missing or stale relative to the graph DB.
+  if (!HAS_FILES) {
+    setStatus('missing — building now', 'warn');
+    build();
+  } else if (STALE) {
+    setStatus('stale — rebuilding', 'warn');
+    build();
+  } else {
+    setStatus('fresh', 'success');
+  }
+})();
+</script>
+
+<style>
+.repo-tree {
+  max-height: 560px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #010409;
+}
+.repo-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  text-decoration: none;
+}
+.repo-file:last-child { border-bottom: none; }
+.repo-file:hover { background: var(--surface-2); text-decoration: none; }
+.repo-file.active {
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--text-bright);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.repo-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-file-meta { color: var(--text-dim); font-size: 11px; }
+</style>
+{% endblock %}

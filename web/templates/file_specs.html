@@ -1,0 +1,695 @@
+{% extends "base.html" %}
+{% set active = 'file_specs' %}
+{% block title %}Per-File Specs · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Per-File Specification Generator</h1>
+    <div class="subtitle">
+      Pick any file from the corpus and four agents (Business Analyst, Technical Writer,
+      Functional Analyst, Critic) collaborate to produce a complete specification —
+      business summary, technical spec, functional spec, plus embedded AST, local call
+      graph, and source excerpts. Cached after first generation.
+    </div>
+  </div>
+</div>
+
+<div class="filespec-layout">
+
+  {# ============================================================ #}
+  {#               LEFT: FILE-TYPE ACCORDION                      #}
+  {# ============================================================ #}
+  <aside class="filespec-sidebar">
+    {% for g in groups %}
+    <details class="kind-group" {% if loop.first %}open{% endif %}>
+      <summary class="kind-summary">
+        <svg class="sidebar-icon"><use href="#{{ g.icon }}"/></svg>
+        <span class="kind-label">{{ g.label }}</span>
+        <span class="kind-count">{{ g.count }}</span>
+      </summary>
+      <ul class="file-list">
+        {% for f in g.files %}
+        <li>
+          <a href="#" class="file-link" data-kind="{{ g.kind }}" data-name="{{ f.name }}">
+            <span class="file-name">{{ f.name }}</span>
+            <span class="file-bytes">{{ (f.bytes / 1024)|round|int }} KB</span>
+          </a>
+        </li>
+        {% endfor %}
+        {% if not g.files %}
+        <li class="file-empty">No files of this type</li>
+        {% endif %}
+      </ul>
+    </details>
+    {% endfor %}
+  </aside>
+
+  {# ============================================================ #}
+  {#               RIGHT: SELECTED-FILE SPEC                      #}
+  {# ============================================================ #}
+  <div class="filespec-main">
+
+    <div id="welcome" class="welcome-card">
+      <h2>Pick a file from the left</h2>
+      <p>The selected file's structured context is loaded immediately. To generate the
+      multi-agent specification (Business + Technical + Functional + Critic review),
+      click <strong>Generate Spec</strong>. Generation takes about 40-60 seconds for the
+      first request; results are cached so the second click is instant.</p>
+      <p>The four agents run on Gemini (Business + Technical writers) and Groq
+      (Functional analyst + Critic). They share a structured artifact context
+      built from the SQLite graph + parsed JSON — never raw source.</p>
+    </div>
+
+    <div id="file-view" style="display:none;">
+
+      {# Header card #}
+      <div class="file-header">
+        <div>
+          <div class="file-eyebrow" id="fh-kind"></div>
+          <h2 class="file-title" id="fh-name"></h2>
+          <div class="file-meta" id="fh-meta"></div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="generate-btn" class="btn btn-primary">Generate Spec</button>
+          <button id="regenerate-btn" class="btn" style="display:none;">Regenerate</button>
+        </div>
+      </div>
+
+      {# Agent pipeline status #}
+      <div id="pipeline-status" class="pipeline-status" style="display:none;">
+        <div class="agent-card" data-agent="BusinessAnalyst">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Business Analyst</div><div class="agent-state">idle</div></div>
+        </div>
+        <div class="agent-card" data-agent="TechnicalWriter">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Technical Writer</div><div class="agent-state">idle</div></div>
+        </div>
+        <div class="agent-card" data-agent="FunctionalAnalyst">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Functional Analyst</div><div class="agent-state">idle</div></div>
+        </div>
+        <div class="agent-card" data-agent="Critic">
+          <div class="agent-dot"></div>
+          <div class="agent-info"><div class="agent-name">Critic (cross-check)</div><div class="agent-state">idle</div></div>
+        </div>
+      </div>
+
+      {# Section: Summary (always available from context) #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">01</span>Context Summary</h3>
+        <div class="kpi-row" id="ctx-summary"></div>
+      </section>
+
+      {# Section: Business Summary #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">02</span>Business Summary</h3>
+        <div id="biz-content" class="spec-content empty">Click "Generate Spec" above.</div>
+      </section>
+
+      {# Section: Technical Spec #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">03</span>Technical Specification</h3>
+        <div id="tech-content" class="spec-content empty">Click "Generate Spec" above.</div>
+      </section>
+
+      {# Section: Functional Spec #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">04</span>Functional Specification</h3>
+        <div id="func-content" class="spec-content empty">Click "Generate Spec" above.</div>
+      </section>
+
+      {# Section: Critic Review #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">05</span>Critic Review &amp; Verdict</h3>
+        <div id="critic-content" class="spec-content empty">Click "Generate Spec" above.</div>
+      </section>
+
+      {# Section: Embedded artifacts — AST, call graph, source #}
+      <section class="spec-section">
+        <h3 class="spec-section-title"><span class="num">06</span>Parser Artifacts</h3>
+        <div class="artifact-tabs">
+          <button class="art-tab active" data-tab="ast">AST</button>
+          <button class="art-tab" data-tab="callgraph">Local Call Graph</button>
+          <button class="art-tab" data-tab="source">Source Excerpts</button>
+          <button class="art-tab" data-tab="raw">Raw Parser JSON</button>
+        </div>
+        <div class="art-pane" data-pane="ast">
+          <div id="ast-mini-canvas"></div>
+        </div>
+        <div class="art-pane" data-pane="callgraph" style="display:none;">
+          <div id="callgraph-mini-canvas"></div>
+        </div>
+        <div class="art-pane" data-pane="source" style="display:none;">
+          <div id="source-list"></div>
+        </div>
+        <div class="art-pane" data-pane="raw" style="display:none;">
+          <pre id="raw-json" class="raw-json">Loading…</pre>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.filespec-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.filespec-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.kind-group { border-bottom: 1px solid var(--border); }
+.kind-group:last-child { border-bottom: none; }
+.kind-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  list-style: none;
+  user-select: none;
+}
+.kind-summary::-webkit-details-marker { display: none; }
+.kind-summary:hover { background: var(--surface-2); border-radius: 6px; }
+.kind-summary .sidebar-icon { width: 14px; height: 14px; opacity: 0.85; }
+.kind-summary .kind-label { flex: 1; }
+.kind-summary .kind-count {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.kind-group[open] .kind-summary {
+  background: var(--surface-2);
+  border-radius: 6px 6px 0 0;
+}
+.file-list { list-style: none; padding: 0 0 8px; margin: 0; }
+.file-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px 6px 32px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+}
+.file-link:hover { background: var(--surface-2); border-left-color: var(--accent); text-decoration: none; }
+.file-link.active { background: rgba(88,166,255,0.12); border-left-color: var(--accent); color: var(--text-bright); }
+.file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-bytes { color: var(--text-dim); font-size: 11px; }
+.file-empty { color: var(--text-dim); font-size: 12px; padding: 8px 32px; font-style: italic; }
+
+.filespec-main { min-width: 0; }
+.welcome-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 32px;
+}
+.welcome-card h2 { margin-top: 0; }
+.welcome-card p { color: var(--text-dim); line-height: 1.65; }
+
+.file-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+.file-eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.file-title { font-size: 22px; margin: 0 0 4px; color: var(--text-bright); font-family: var(--mono); }
+.file-meta { font-size: 12px; color: var(--text-dim); }
+
+.pipeline-status {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.agent-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface-3);
+  border: 2px solid var(--border);
+  transition: all 0.15s;
+}
+.agent-card[data-state="running"] .agent-dot {
+  background: var(--accent); border-color: var(--accent);
+  animation: pulse 1.2s infinite;
+}
+.agent-card[data-state="done"] .agent-dot { background: var(--success); border-color: var(--success); }
+.agent-card[data-state="error"] .agent-dot { background: var(--danger); border-color: var(--danger); }
+.agent-name { font-weight: 600; color: var(--text-bright); }
+.agent-state { font-size: 11px; color: var(--text-dim); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.spec-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+}
+.spec-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-bright);
+  margin: 0 0 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+.spec-section-title .num {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 12px;
+}
+.spec-content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.spec-content.empty { color: var(--text-dim); font-style: italic; }
+.spec-content h2, .spec-content h3 { color: var(--text-bright); margin: 16px 0 8px; font-size: 15px; }
+.spec-content p { margin: 0 0 12px; }
+.spec-content ul, .spec-content ol { padding-left: 22px; margin: 0 0 12px; }
+.spec-content code { background: var(--bg); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+.spec-content strong { color: var(--text-bright); }
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kpi-row .kpi {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.kpi-num { font-size: 22px; font-weight: 700; color: var(--text-bright); }
+.kpi-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.artifact-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.art-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-weight: 500;
+}
+.art-tab:hover { color: var(--text-bright); }
+.art-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+#ast-mini-canvas, #callgraph-mini-canvas {
+  width: 100%;
+  height: 420px;
+  background: #010409;
+  border-radius: 6px;
+}
+
+#source-list .source-block {
+  margin-bottom: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+#source-list .source-head {
+  padding: 8px 12px;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-bright);
+  font-family: var(--mono);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+#source-list .source-head .lines { color: var(--text-dim); }
+#source-list pre {
+  margin: 0;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  overflow-x: auto;
+  max-height: 320px;
+  white-space: pre;
+}
+
+.raw-json {
+  background: #010409;
+  border-radius: 6px;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 480px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script>
+(function(){
+  let currentKind = null;
+  let currentName = null;
+  let currentContext = null;
+  let activeES = null;
+
+  // ----- file selection -----
+  document.querySelectorAll('.file-link').forEach(a => {
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.file-link').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+      currentKind = a.dataset.kind;
+      currentName = a.dataset.name;
+      if (activeES) { activeES.close(); activeES = null; }
+      await loadFile();
+    });
+  });
+
+  async function loadFile() {
+    document.getElementById('welcome').style.display = 'none';
+    document.getElementById('file-view').style.display = '';
+
+    // Reset agent state
+    document.getElementById('pipeline-status').style.display = 'none';
+    document.querySelectorAll('.agent-card').forEach(c => {
+      c.removeAttribute('data-state');
+      c.querySelector('.agent-state').textContent = 'idle';
+    });
+    document.getElementById('biz-content').className = 'spec-content empty';
+    document.getElementById('biz-content').textContent = 'Click "Generate Spec" above.';
+    document.getElementById('tech-content').className = 'spec-content empty';
+    document.getElementById('tech-content').textContent = 'Click "Generate Spec" above.';
+    document.getElementById('func-content').className = 'spec-content empty';
+    document.getElementById('func-content').textContent = 'Click "Generate Spec" above.';
+    document.getElementById('critic-content').className = 'spec-content empty';
+    document.getElementById('critic-content').textContent = 'Click "Generate Spec" above.';
+
+    // Header
+    document.getElementById('fh-kind').textContent = currentKind.toUpperCase();
+    document.getElementById('fh-name').textContent = currentName;
+
+    // Fetch context (and any cached spec)
+    const r = await fetch(`/api/file-specs/${currentKind}/${encodeURIComponent(currentName)}/context`);
+    const j = await r.json();
+    currentContext = j.context;
+    renderContext(j.context);
+    if (j.cached_spec) {
+      renderSpec(j.cached_spec);
+      document.getElementById('regenerate-btn').style.display = '';
+      document.getElementById('generate-btn').style.display = 'none';
+    } else {
+      document.getElementById('regenerate-btn').style.display = 'none';
+      document.getElementById('generate-btn').style.display = '';
+    }
+  }
+
+  function renderContext(ctx) {
+    // Meta
+    const summary = ctx.summary || {};
+    const metaParts = [];
+    if (summary.paragraphs) metaParts.push(`${summary.paragraphs} paragraphs`);
+    if (summary.steps) metaParts.push(`${summary.steps} steps`);
+    if (summary.mapsets) metaParts.push(`${summary.mapsets} mapsets`);
+    if (summary.total_defines) metaParts.push(`${summary.total_defines} defines`);
+    if (summary.data_items) metaParts.push(`${summary.data_items} data items`);
+    document.getElementById('fh-meta').textContent = metaParts.join(' · ');
+
+    // KPI row
+    const kpis = [];
+    for (const [k, v] of Object.entries(summary)) {
+      if (typeof v === 'number') {
+        kpis.push(`<div class="kpi"><div class="kpi-num">${v.toLocaleString()}</div><div class="kpi-label">${k.replace(/_/g, ' ')}</div></div>`);
+      } else if (Array.isArray(v)) {
+        kpis.push(`<div class="kpi"><div class="kpi-num">${v.length}</div><div class="kpi-label">${k.replace(/_/g, ' ')}</div></div>`);
+      }
+    }
+    document.getElementById('ctx-summary').innerHTML = kpis.join('');
+
+    // Raw JSON pane
+    document.getElementById('raw-json').textContent = JSON.stringify(ctx, null, 2);
+
+    // Source excerpts
+    const srcList = document.getElementById('source-list');
+    srcList.innerHTML = '';
+    for (const ex of (ctx.source_excerpts || [])) {
+      const div = document.createElement('div');
+      div.className = 'source-block';
+      div.innerHTML = `<div class="source-head"><span>${ex.title}</span><span class="lines">lines ${ex.start_line}-${ex.end_line}</span></div><pre>${escapeHtml(ex.code)}</pre>`;
+      srcList.appendChild(div);
+    }
+    if ((ctx.source_excerpts || []).length === 0) {
+      srcList.innerHTML = '<div class="dim" style="padding:20px;">No source excerpts available for this file kind.</div>';
+    }
+
+    // Mini AST
+    renderMiniAst(ctx);
+    // Local call graph
+    renderLocalCallGraph(ctx);
+  }
+
+  function renderSpec(spec) {
+    if (spec.business_summary) setSpecContent('biz-content', spec.business_summary.text);
+    if (spec.technical_specification) setSpecContent('tech-content', spec.technical_specification.text);
+    if (spec.functional_specification) setSpecContent('func-content', spec.functional_specification.text);
+    if (spec.critic_review) setSpecContent('critic-content', spec.critic_review.text);
+  }
+  function setSpecContent(id, md) {
+    const el = document.getElementById(id);
+    el.className = 'spec-content';
+    el.innerHTML = marked.parse(md || '');
+  }
+
+  // ----- generate -----
+  function runGenerate(force) {
+    if (!currentKind || !currentName) return;
+    document.getElementById('generate-btn').disabled = true;
+    document.getElementById('regenerate-btn').disabled = true;
+    document.getElementById('pipeline-status').style.display = '';
+    document.querySelectorAll('.agent-card').forEach(c => {
+      c.setAttribute('data-state', '');
+      c.querySelector('.agent-state').textContent = 'queued…';
+    });
+
+    const url = `/api/file-specs/${currentKind}/${encodeURIComponent(currentName)}/generate?force=${force ? 1 : 0}`;
+    activeES = new EventSource(url);
+
+    activeES.addEventListener('cached', (e) => {
+      const d = JSON.parse(e.data);
+      renderSpec(d.spec);
+      document.querySelectorAll('.agent-card').forEach(c => {
+        c.setAttribute('data-state', 'done');
+        c.querySelector('.agent-state').textContent = 'cached';
+      });
+    });
+    activeES.addEventListener('agent_start', (e) => {
+      const d = JSON.parse(e.data);
+      const card = document.querySelector(`.agent-card[data-agent="${d.agent}"]`);
+      if (card) {
+        card.setAttribute('data-state', 'running');
+        card.querySelector('.agent-state').textContent = 'running…';
+      }
+    });
+    activeES.addEventListener('agent_done', (e) => {
+      const d = JSON.parse(e.data);
+      const card = document.querySelector(`.agent-card[data-agent="${d.agent}"]`);
+      if (card) {
+        card.setAttribute('data-state', 'done');
+        card.querySelector('.agent-state').textContent = `${d.mode} · ${d.elapsed_s}s`;
+      }
+    });
+    activeES.addEventListener('spec', (e) => {
+      const d = JSON.parse(e.data);
+      renderSpec(d.spec);
+    });
+    activeES.addEventListener('error', (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        alert('Generation error: ' + d.message);
+      } catch (_) { /* network drop */ }
+    });
+    activeES.addEventListener('complete', () => {
+      activeES.close();
+      activeES = null;
+      document.getElementById('generate-btn').disabled = false;
+      document.getElementById('regenerate-btn').disabled = false;
+      document.getElementById('generate-btn').style.display = 'none';
+      document.getElementById('regenerate-btn').style.display = '';
+    });
+  }
+
+  document.getElementById('generate-btn').addEventListener('click', () => runGenerate(false));
+  document.getElementById('regenerate-btn').addEventListener('click', () => {
+    if (confirm('Regenerate spec? This will burn API quota and may take 40-60s.')) runGenerate(true);
+  });
+
+  // ----- artifact tab switching -----
+  document.querySelectorAll('.art-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.art-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const tab = t.dataset.tab;
+      document.querySelectorAll('.art-pane').forEach(p => p.style.display = (p.dataset.pane === tab) ? '' : 'none');
+    });
+  });
+
+  // ----- mini visualizations -----
+  let astCy = null, cgCy = null;
+
+  function renderMiniAst(ctx) {
+    const container = document.getElementById('ast-mini-canvas');
+    if (astCy) { astCy.destroy(); astCy = null; }
+    const nodes = [{ data: { id: 'root', label: currentName, kind: currentKind.toUpperCase() } }];
+    const edges = [];
+    // For COBOL: paragraphs as children
+    if (ctx.paragraphs) {
+      for (const p of ctx.paragraphs.slice(0, 30)) {
+        nodes.push({ data: { id: 'p_' + p.uuid, label: p.name, kind: 'Paragraph' } });
+        edges.push({ data: { id: 'e_' + p.uuid, source: 'root', target: 'p_' + p.uuid } });
+      }
+    } else if (ctx.items) {
+      for (const [i, it] of (ctx.items || []).slice(0, 30).entries()) {
+        const nm = it.name || it.step || it.verb || JSON.stringify(it).slice(0, 30);
+        nodes.push({ data: { id: 'it_' + i, label: nm, kind: 'Item' } });
+        edges.push({ data: { id: 'ie_' + i, source: 'root', target: 'it_' + i } });
+      }
+    } else if (ctx.steps) {
+      for (const [i, s] of ctx.steps.entries()) {
+        nodes.push({ data: { id: 'st_' + i, label: s.step || `step ${i}`, kind: 'Step' } });
+        edges.push({ data: { id: 'se_' + i, source: 'root', target: 'st_' + i } });
+      }
+    }
+
+    if (nodes.length <= 1) {
+      container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-dim);">No AST structure available for this file kind.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    astCy = cytoscape({
+      container,
+      elements: { nodes, edges },
+      style: [
+        { selector: 'node', style: {
+            'background-color': ele => ele.data('id') === 'root' ? '#a371f7' : '#58a6ff',
+            'label': 'data(label)',
+            'color': '#f0f6fc', 'font-size': '10px',
+            'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 6,
+            'width': 14, 'height': 14, 'border-width': 1, 'border-color': '#30363d',
+        }},
+        { selector: 'edge', style: {
+            'width': 1, 'line-color': '#30363d', 'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle', 'target-arrow-color': '#30363d', 'arrow-scale': 0.5,
+        }},
+      ],
+      layout: { name: 'dagre', rankDir: 'LR', nodeSep: 8, rankSep: 60, fit: true },
+      wheelSensitivity: 0.2,
+    });
+  }
+
+  function renderLocalCallGraph(ctx) {
+    const container = document.getElementById('callgraph-mini-canvas');
+    if (cgCy) { cgCy.destroy(); cgCy = null; }
+    const nodes = [{ data: { id: 'me', label: ctx.program_name || currentName.replace(/\.cbl$/i, ''), self: true } }];
+    const edges = [];
+    const seen = new Set(['me']);
+    for (const c of (ctx.calls_out || [])) {
+      if (!c.callee_program) continue;
+      const id = 'out_' + c.callee_program;
+      if (!seen.has(id)) { nodes.push({ data: { id, label: c.callee_program } }); seen.add(id); }
+      edges.push({ data: { id: `eo_${c.line}_${id}`, source: 'me', target: id, kind: c.edge_kind } });
+    }
+    for (const c of (ctx.calls_in || [])) {
+      if (!c.caller_program) continue;
+      const id = 'in_' + c.caller_program;
+      if (!seen.has(id)) { nodes.push({ data: { id, label: c.caller_program } }); seen.add(id); }
+      edges.push({ data: { id: `ei_${c.line}_${id}`, source: id, target: 'me', kind: c.edge_kind } });
+    }
+    if (nodes.length <= 1) {
+      container.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-dim);">This file has no recorded call edges (in or out).</div>';
+      return;
+    }
+    container.innerHTML = '';
+    cgCy = cytoscape({
+      container,
+      elements: { nodes, edges },
+      style: [
+        { selector: 'node', style: {
+            'background-color': ele => ele.data('self') ? '#a371f7' : '#58a6ff',
+            'label': 'data(label)', 'color': '#f0f6fc', 'font-size': '11px',
+            'text-valign': 'center', 'text-halign': 'center',
+            'text-outline-color': '#0d1117', 'text-outline-width': 2,
+            'width': 24, 'height': 24,
+        }},
+        { selector: 'edge', style: {
+            'width': 1.5, 'line-color': '#3fb950', 'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle', 'target-arrow-color': '#3fb950', 'arrow-scale': 0.7,
+        }},
+      ],
+      layout: { name: 'cose', animate: false, idealEdgeLength: 70, nodeRepulsion: 6000, fit: true },
+      wheelSensitivity: 0.2,
+    });
+  }
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+{% endblock %}

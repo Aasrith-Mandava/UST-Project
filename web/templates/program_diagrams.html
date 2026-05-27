@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% set active = 'programs' %}
+{% block title %}{{ program.name }} Diagrams · CardDemo Pipeline{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/programs">Programs</a>
+  <span class="sep">/</span>
+  <a href="/programs/{{ program.name }}">{{ program.name }}</a>
+  <span class="sep">/</span>
+  <span>Diagrams</span>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ program.name }} — Per-Program Diagrams</h1>
+    <div class="subtitle">
+      Interactive diagrams scoped to <span class="mono">{{ program.file }}</span>.
+      Each diagram is built live from the SQLite graph store and renders with
+      Cytoscape — click any node to focus, drag to pan, scroll to zoom.
+    </div>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <a class="btn" href="/programs/{{ program.name }}">← Back to program</a>
+    <a class="btn btn-primary" href="/programs/{{ program.name }}/ast">View AST →</a>
+  </div>
+</div>
+
+<div class="pd-stat-row">
+  <div class="pd-kpi" id="kpi-cfg-nodes"><div class="kpi-n">—</div><div class="kpi-l">Paragraphs</div></div>
+  <div class="pd-kpi" id="kpi-cfg-edges"><div class="kpi-n">—</div><div class="kpi-l">PERFORM edges</div></div>
+  <div class="pd-kpi" id="kpi-callers"><div class="kpi-n">—</div><div class="kpi-l">Callers</div></div>
+  <div class="pd-kpi" id="kpi-callees"><div class="kpi-n">—</div><div class="kpi-l">Callees</div></div>
+  <div class="pd-kpi" id="kpi-files"><div class="kpi-n">—</div><div class="kpi-l">Files accessed</div></div>
+  <div class="pd-kpi" id="kpi-data-items"><div class="kpi-n">—</div><div class="kpi-l">Tracked data items</div></div>
+</div>
+
+<div class="tabs pd-tabs">
+  <div class="tab active" data-tab="cfg">Control Flow</div>
+  <div class="tab" data-tab="calls">Local Call Graph</div>
+  <div class="tab" data-tab="fio">File I/O</div>
+  <div class="tab" data-tab="du">Data Flow (top-20 data items)</div>
+</div>
+
+<div class="card pd-canvas-card">
+  <div class="pd-canvas-head">
+    <div class="pd-canvas-title" id="canvas-title">Control Flow</div>
+    <div class="pd-canvas-actions">
+      <select id="layout-select">
+        <option value="dagre">dagre (top-down)</option>
+        <option value="breadthfirst">breadthfirst</option>
+        <option value="cose">cose (force)</option>
+        <option value="circle">circle</option>
+      </select>
+      <button class="btn" id="fit-btn" style="padding:4px 10px;font-size:12px;">Fit</button>
+    </div>
+  </div>
+  <div id="diagram-canvas" class="pd-canvas">Loading…</div>
+  <div id="diagram-info" class="pd-info"></div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="card-head"><span class="card-title">Legend</span></div>
+  <div id="diagram-legend" style="padding:8px 4px 4px;font-size:12px;color:var(--text-dim);"></div>
+</div>
+
+<style>
+.pd-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.pd-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.pd-kpi .kpi-n { font-size: 22px; font-weight: 700; color: var(--text-bright); }
+.pd-kpi .kpi-l { font-size: 11px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.pd-tabs { margin-bottom: 0; }
+.pd-canvas-card { padding: 0; overflow: hidden; }
+.pd-canvas-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.pd-canvas-title { font-weight: 600; color: var(--text-bright); }
+.pd-canvas-actions { display: flex; gap: 8px; }
+.pd-canvas-actions select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: var(--radius);
+}
+.pd-canvas {
+  width: 100%;
+  height: 560px;
+  background: #010409;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.pd-info {
+  padding: 12px 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  display: none;
+}
+.pd-info.show { display: block; }
+.pd-info pre { margin: 6px 0 0; font-size: 11px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script>
+(function(){
+  const PROGRAM = {{ program.name | tojson }};
+  let cy = null;
+  let currentTab = 'cfg';
+
+  const TABS = {
+    cfg: {
+      title: 'Control Flow — PERFORM edges between paragraphs',
+      url: `/api/programs/${encodeURIComponent(PROGRAM)}/cfg`,
+      defaultLayout: 'dagre',
+      style: cfgStyle(),
+      legend: '<span style="display:inline-block;width:10px;height:10px;background:#58a6ff;border-radius:50%;margin:0 6px;"></span>Paragraph &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#3fb950;vertical-align:middle;margin:0 6px;"></span>PERFORM edge',
+    },
+    calls: {
+      title: 'Local Call Graph — what calls this program and what it calls',
+      url: `/api/programs/${encodeURIComponent(PROGRAM)}/local-calls`,
+      defaultLayout: 'cose',
+      style: callsStyle(),
+      legend: '<span style="display:inline-block;width:10px;height:10px;background:#a371f7;border-radius:50%;margin:0 6px;"></span>This program &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#58a6ff;border-radius:50%;margin:0 6px;"></span>Parsed program &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#8b949e;border-radius:50%;margin:0 6px;"></span>External &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#3fb950;vertical-align:middle;margin:0 6px;"></span>CALL_STATIC &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#a371f7;vertical-align:middle;margin:0 6px;"></span>CICS_LINK &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#db6d28;vertical-align:middle;margin:0 6px;"></span>CICS_XCTL',
+    },
+    fio: {
+      title: 'File I/O — VSAM files this program reads and writes',
+      url: `/api/programs/${encodeURIComponent(PROGRAM)}/file-io-graph`,
+      defaultLayout: 'cose',
+      style: fioStyle(),
+      legend: '<span style="display:inline-block;width:10px;height:10px;background:#a371f7;border-radius:50%;margin:0 6px;"></span>Program &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#3fb950;border-radius:50%;margin:0 6px;"></span>VSAM File &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#58a6ff;vertical-align:middle;margin:0 6px;"></span>READ &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#db6d28;vertical-align:middle;margin:0 6px;"></span>WRITE',
+    },
+    du: {
+      title: 'Data Flow — top-20 data items read/written by this program',
+      url: `/api/programs/${encodeURIComponent(PROGRAM)}/def-use-graph?top_n=20`,
+      defaultLayout: 'cose',
+      style: duStyle(),
+      legend: '<span style="display:inline-block;width:10px;height:10px;background:#a371f7;border-radius:50%;margin:0 6px;"></span>Program &nbsp; <span style="display:inline-block;width:10px;height:10px;background:#d29922;border-radius:50%;margin:0 6px;"></span>Data Item &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#58a6ff;vertical-align:middle;margin:0 6px;"></span>READ (data item → program) &nbsp; <span style="display:inline-block;width:18px;height:2px;background:#db6d28;vertical-align:middle;margin:0 6px;"></span>WRITE (program → data item)',
+    },
+  };
+
+  // ----- styles per tab -----
+  function cfgStyle() {
+    return [
+      { selector: 'node', style: {
+        'background-color': '#58a6ff', 'label': 'data(label)', 'color': '#f0f6fc',
+        'font-size': '10px', 'text-valign': 'center', 'text-halign': 'center',
+        'text-outline-color': '#0d1117', 'text-outline-width': 2,
+        'width': 36, 'height': 36, 'border-color': '#30363d', 'border-width': 1,
+      }},
+      { selector: 'node:selected', style: {
+        'border-color': '#f0f6fc', 'border-width': 3, 'background-color': '#1f6feb',
+      }},
+      { selector: 'edge', style: {
+        'width': 1.5, 'line-color': '#3fb950', 'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle', 'target-arrow-color': '#3fb950', 'arrow-scale': 0.8,
+      }},
+    ];
+  }
+  function callsStyle() {
+    const edgeColor = ele => ({
+      CALL_STATIC: '#3fb950', CICS_LINK: '#a371f7', CICS_XCTL: '#db6d28',
+    }[ele.data('kind')] || '#8b949e');
+    return [
+      { selector: 'node', style: {
+        'background-color': ele => ele.data('self') ? '#a371f7' : (ele.data('parsed') ? '#58a6ff' : '#8b949e'),
+        'label': 'data(label)', 'color': '#f0f6fc', 'font-size': '11px',
+        'text-valign': 'center', 'text-halign': 'center',
+        'text-outline-color': '#0d1117', 'text-outline-width': 2,
+        'width': ele => ele.data('self') ? 40 : 28, 'height': ele => ele.data('self') ? 40 : 28,
+        'border-color': '#30363d', 'border-width': 1,
+      }},
+      { selector: 'edge', style: {
+        'width': 1.5, 'line-color': edgeColor, 'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle', 'target-arrow-color': edgeColor, 'arrow-scale': 0.8,
+      }},
+    ];
+  }
+  function fioStyle() {
+    return [
+      { selector: 'node[kind="program"]', style: {
+        'background-color': '#a371f7', 'label': 'data(label)', 'color': '#f0f6fc',
+        'font-size': '12px', 'text-valign': 'center', 'text-halign': 'center',
+        'text-outline-color': '#0d1117', 'text-outline-width': 2,
+        'width': 42, 'height': 42, 'shape': 'round-rectangle',
+      }},
+      { selector: 'node[kind="file"]', style: {
+        'background-color': '#3fb950', 'label': 'data(label)', 'color': '#f0f6fc',
+        'font-size': '10px', 'text-valign': 'center', 'text-halign': 'center',
+        'text-outline-color': '#0d1117', 'text-outline-width': 2,
+        'width': 32, 'height': 32, 'shape': 'cylinder',
+      }},
+      { selector: 'edge', style: {
+        'width': ele => 1 + Math.min(ele.data('count') || 1, 5) * 0.6,
+        'line-color': ele => ele.data('kind') === 'READ' ? '#58a6ff' : '#db6d28',
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'target-arrow-color': ele => ele.data('kind') === 'READ' ? '#58a6ff' : '#db6d28',
+        'arrow-scale': 0.9, 'label': 'data(ops)', 'font-size': '9px', 'color': '#8b949e',
+        'text-rotation': 'autorotate', 'text-margin-y': -8, 'text-background-color': '#010409',
+        'text-background-opacity': 0.8, 'text-background-padding': '2px',
+      }},
+    ];
+  }
+  function duStyle() {
+    return [
+      { selector: 'node[kind="program"]', style: {
+        'background-color': '#a371f7', 'label': 'data(label)', 'color': '#f0f6fc',
+        'font-size': '13px', 'text-valign': 'center', 'text-halign': 'center',
+        'text-outline-color': '#0d1117', 'text-outline-width': 2,
+        'width': 48, 'height': 48, 'shape': 'round-rectangle',
+      }},
+      { selector: 'node[kind="data_item"]', style: {
+        'background-color': '#d29922', 'label': 'data(label)', 'color': '#0d1117',
+        'font-size': '9px', 'text-valign': 'center', 'text-halign': 'center',
+        'width': 26, 'height': 26,
+      }},
+      { selector: 'edge', style: {
+        'width': ele => 1 + Math.min(ele.data('count') || 1, 8) * 0.4,
+        'line-color': ele => ele.data('kind') === 'READ' ? '#58a6ff' : '#db6d28',
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'target-arrow-color': ele => ele.data('kind') === 'READ' ? '#58a6ff' : '#db6d28',
+        'arrow-scale': 0.7,
+      }},
+    ];
+  }
+
+  // ----- load a tab's data + render -----
+  async function loadTab(tabId) {
+    currentTab = tabId;
+    const conf = TABS[tabId];
+    document.getElementById('canvas-title').textContent = conf.title;
+    document.getElementById('diagram-legend').innerHTML = conf.legend;
+    document.getElementById('diagram-info').classList.remove('show');
+    document.getElementById('diagram-info').innerHTML = '';
+
+    document.getElementById('layout-select').value = conf.defaultLayout;
+    const container = document.getElementById('diagram-canvas');
+    container.innerHTML = '';
+    container.style.cssText = 'width:100%;height:560px;background:#010409;display:block;';
+
+    try {
+      const r = await fetch(conf.url);
+      const d = await r.json();
+
+      if (cy) { cy.destroy(); cy = null; }
+      if (!d.elements || d.elements.nodes.length === 0) {
+        container.style.cssText = 'width:100%;height:560px;background:#010409;display:flex;align-items:center;justify-content:center;color:var(--text-dim);';
+        container.textContent = 'No data — this program has no edges of this type.';
+        return;
+      }
+
+      cy = cytoscape({
+        container, elements: d.elements,
+        style: conf.style,
+        layout: { name: conf.defaultLayout, animate: false, fit: true,
+                  rankDir: 'TB', nodeSep: 14, rankSep: 30,
+                  idealEdgeLength: 70, nodeRepulsion: 6000 },
+        wheelSensitivity: 0.2,
+      });
+      cy.on('tap', 'node', e => {
+        const info = document.getElementById('diagram-info');
+        info.classList.add('show');
+        info.innerHTML = '<strong>Node:</strong> ' + e.target.id() +
+          '<pre>' + JSON.stringify(e.target.data(), null, 2) + '</pre>';
+      });
+      cy.on('tap', 'edge', e => {
+        const info = document.getElementById('diagram-info');
+        info.classList.add('show');
+        info.innerHTML = '<strong>Edge:</strong> ' + e.target.data('source') +
+          ' → ' + e.target.data('target') +
+          '<pre>' + JSON.stringify(e.target.data(), null, 2) + '</pre>';
+      });
+      cy.on('tap', e => { if (e.target === cy) document.getElementById('diagram-info').classList.remove('show'); });
+
+      // Update KPIs based on which diagram loaded
+      if (tabId === 'cfg') {
+        kpi('kpi-cfg-nodes', d.node_count);
+        kpi('kpi-cfg-edges', d.edge_count);
+      } else if (tabId === 'calls') {
+        kpi('kpi-callers', d.callers);
+        kpi('kpi-callees', d.callees);
+      } else if (tabId === 'fio') {
+        kpi('kpi-files', d.file_count);
+      } else if (tabId === 'du') {
+        kpi('kpi-data-items', d.data_item_count);
+      }
+    } catch (e) {
+      container.style.cssText = 'width:100%;height:560px;background:#010409;display:flex;align-items:center;justify-content:center;color:var(--danger);';
+      container.textContent = 'Load failed: ' + e;
+    }
+  }
+
+  function kpi(id, val) {
+    const el = document.querySelector(`#${id} .kpi-n`);
+    if (el) el.textContent = (val ?? '—').toLocaleString();
+  }
+
+  // ----- wire tabs (use shared initTabs from app.js for active toggling) -----
+  document.querySelectorAll('.pd-tabs .tab').forEach(t => {
+    t.addEventListener('click', () => setTimeout(() => loadTab(t.dataset.tab), 30));
+  });
+  document.getElementById('layout-select').addEventListener('change', e => {
+    if (cy) cy.layout({ name: e.target.value, animate: false, fit: true,
+                        rankDir: 'TB', nodeSep: 14, rankSep: 30 }).run();
+  });
+  document.getElementById('fit-btn').addEventListener('click', () => cy && cy.fit());
+
+  // Initial load — eagerly fire all 4 endpoints to populate KPIs, then render CFG.
+  ['cfg', 'calls', 'fio', 'du'].forEach(async (id) => {
+    try {
+      const r = await fetch(TABS[id].url);
+      const d = await r.json();
+      if (id === 'cfg') { kpi('kpi-cfg-nodes', d.node_count); kpi('kpi-cfg-edges', d.edge_count); }
+      if (id === 'calls') { kpi('kpi-callers', d.callers); kpi('kpi-callees', d.callees); }
+      if (id === 'fio') { kpi('kpi-files', d.file_count); }
+      if (id === 'du') { kpi('kpi-data-items', d.data_item_count); }
+    } catch (_) {}
+  });
+  loadTab('cfg');
+})();
+</script>
+{% endblock %}

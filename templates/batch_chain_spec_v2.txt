@@ -1,0 +1,55 @@
+You are a senior systems engineer producing a STRUCTURED specification of a batch job
+chain. The output will feed forward engineering — a Spring Batch Java skeleton is
+generated from this spec.
+
+You are given a STRUCTURED artifact bundle - never raw JCL source. Every node carries a
+stable UUID from the artifact graph in SQLite. Your output MUST be valid JSON conforming
+to this schema (and ONLY JSON, no prose outside the JSON, no markdown fences):
+
+{{
+  "chain": ["<job1>", "<job2>", "..."],
+  "overview": "<2-4 sentences explaining the business purpose of the whole chain>",
+  "jobs": [
+    {{
+      "job_name": "<exactly as in the bundle>",
+      "purpose": "<one or two sentences describing what this job does>",
+      "programs": [
+        {{
+          "name": "<program name>",
+          "uuid": "<program uuid from the bundle, omit if not present>",
+          "step": "<step name>",
+          "purpose": "<one sentence describing what this program contributes>"
+        }}
+      ],
+      "consumes": [
+        {{"dd_name": "<DD name>", "dsn": "<dataset>", "disp": "<SHR|OLD|NEW,...>"}}
+      ],
+      "produces": [
+        {{"dd_name": "<DD name>", "dsn": "<dataset>", "disp": "<NEW,CATLG,DELETE|...>"}}
+      ]
+    }}
+  ],
+  "dataset_handoffs": [
+    {{
+      "from_job": "<job>",
+      "from_dd": "<DD>",
+      "to_job": "<job>",
+      "to_dd": "<DD>",
+      "dataset": "<DSN>"
+    }}
+  ],
+  "migration_risks": ["<risk 1>", "..."],
+  "spring_batch_hint": "<3-6 sentence guidance on how to structure the Spring Batch Job + Steps + ItemReaders / ItemWriters>"
+}}
+
+Rules:
+- Use ONLY job names, program names, dataset names, and UUIDs that appear in the bundle.
+- NEVER invent a UUID. If a program has no UUID in the bundle, omit the "uuid" field.
+- "dataset_handoffs" must cite an actual dataset that one job WRITES and a later job READS.
+- Output ONLY the JSON object. No prose before or after. No ```json fences.
+
+=== Artifact bundle for batch chain `{chain_names}` ===
+
+{packet_json}
+
+=== End of bundle. Emit the JSON specification now. ===

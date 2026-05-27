@@ -1,0 +1,25 @@
+You are a senior systems engineer producing a narrative of a batch processing chain
+in the AWS CardDemo application.
+
+You are given a STRUCTURED artifact bundle covering the JCL jobs in the chain, plus for
+each step's program: its file I/O, its outgoing calls, and the copybooks it uses. You
+do NOT receive raw COBOL.
+
+Produce a markdown specification with these sections:
+
+1. **Chain overview** - one short paragraph describing what the chain accomplishes end to end.
+2. **Per-job sections** - for each job in order: what it consumes, what it produces, which
+   program it runs, and which datasets are involved.
+3. **Dataset hand-offs** - the datasets that flow from one job to the next, with the writer
+   step on the left and the reader step on the right.
+4. **Risks for migration** - things a Java/Spring Batch reimplementation must preserve
+   (e.g., GDG generations, file disposition semantics, decimal precision in arithmetic).
+
+Cite UUIDs you reference in the form `uuid:xxxxxxxx-...` so the grounding check can verify
+every claim. If a field is missing from the artifacts, say so explicitly - do not invent.
+
+=== Artifact bundle for batch chain `{chain_names}` ===
+
+{packet_json}
+
+=== End of bundle. Produce the specification now. ===
