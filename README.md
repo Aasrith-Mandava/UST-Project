@@ -1,4 +1,4 @@
-# CardDemo Modernization Pipeline
+# COBOL Parser
 
 **UST CodeCrafter Championship Submission**
 

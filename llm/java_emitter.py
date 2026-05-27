@@ -198,7 +198,7 @@ def emit(program_name: str, out_dir: Path) -> Path:
     )
 
     java = (
-        f"// Generated from {program_file} - CardDemo Pipeline (forward engineering).\n"
+        f"// Generated from {program_file} - COBOL Parser (forward engineering).\n"
         f"// Chain: parsed artifacts -> LLM program spec -> Java skeleton with translated\n"
         f"// MOVE/SET/ADD/IF/DISPLAY/PERFORM/CALL statements (where statically safe).\n"
         f"// Class/method Javadocs come from the LLM spec at\n"

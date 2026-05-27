@@ -1,5 +1,5 @@
 """
-UST CodeCrafter CardDemo Pipeline - REST API.
+COBOL Parser — UST CodeCrafter Championship — REST API.
 
 Endpoints (per the championship brief):
   GET /program/{name}
@@ -38,7 +38,7 @@ from fastapi.templating import Jinja2Templates
 
 from .database import connect, row_to_dict, rows_to_dicts
 
-app = FastAPI(title="CardDemo Pipeline API", version="1.0.0")
+app = FastAPI(title="COBOL Parser API", version="1.0.0")
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"

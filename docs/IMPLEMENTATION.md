@@ -238,7 +238,7 @@ picocli-driven subcommands:
 
 ```
 ┌──────────────────────────────────┐
-│ CardDemo Pipeline · UST CodeCrafter │
+│ COBOL Parser                     │
 ├──────────────────────────────────┤
 │ WORKSPACE                        │
 │  ◐ Dashboard                     │

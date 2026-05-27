@@ -1,5 +1,5 @@
 """
-End-to-end LLM demo for the CardDemo Pipeline.
+End-to-end LLM demo for COBOL Parser.
 
 Generates two specifications:
   1. COTRN02C VALIDATE-INPUT-DATA-FIELDS (online transaction paragraph)

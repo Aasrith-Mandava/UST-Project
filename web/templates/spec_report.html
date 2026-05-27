@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set active = 'spec_report' %}
-{% block title %}{{ report.front_matter.title }} · CardDemo Pipeline{% endblock %}
+{% block title %}{{ report.front_matter.title }} · COBOL Parser{% endblock %}
 {% block content %}
 
 <div class="report-layout">
@@ -42,7 +42,7 @@
 
     {# ---------- 1. Front matter ---------- #}
     <section id="sec-front" class="report-section report-cover">
-      <div class="cover-eyebrow">CardDemo Modernization Pipeline</div>
+      <div class="cover-eyebrow">COBOL Parser</div>
       <h1 class="cover-title">{{ report.front_matter.title }}</h1>
       <div class="cover-subtitle">{{ report.front_matter.subtitle }}</div>
       <dl class="cover-meta">
